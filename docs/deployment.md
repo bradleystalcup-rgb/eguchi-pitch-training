@@ -19,10 +19,51 @@ https://eguchi.evidentco.com
 Set these for the PM2 process before relying on real auth/database behavior:
 
 ```bash
-DATABASE_URL="postgres://postgres:postgres@localhost:5432/eguchi_pitch_training"
+DATABASE_URL="postgres://eguchi_app:replace-with-db-password@localhost:5432/eguchi_pitch_training"
 BETTER_AUTH_SECRET="replace-with-a-long-random-secret"
 BETTER_AUTH_URL="https://eguchi.evidentco.com"
 ```
+
+Use a long generated value for `BETTER_AUTH_SECRET` and a unique strong password for
+`eguchi_app`. Do not run the app against the `postgres` superuser in production.
+
+## Database Rollout
+
+Target production database and role:
+
+```txt
+Database: eguchi_pitch_training
+Role: eguchi_app
+Migration: scripts/db/0001_initial_auth_training.sql
+```
+
+Create the dedicated role and database before starting the production PM2 process:
+
+```bash
+ADMIN_DATABASE_URL='postgres://postgres:replace-with-admin-password@localhost:5432/postgres'
+DB_PASSWORD='replace-with-strong-password'
+psql "${ADMIN_DATABASE_URL}" -v ON_ERROR_STOP=1 -c "CREATE ROLE eguchi_app LOGIN PASSWORD '${DB_PASSWORD}';"
+psql "${ADMIN_DATABASE_URL}" -v ON_ERROR_STOP=1 -c "CREATE DATABASE eguchi_pitch_training OWNER eguchi_app;"
+```
+
+Apply the initial migration as the app role:
+
+```bash
+PGPASSWORD="${DB_PASSWORD}" psql -h localhost -U eguchi_app -d eguchi_pitch_training -v ON_ERROR_STOP=1 -f scripts/db/0001_initial_auth_training.sql
+```
+
+Verify the schema and seed data:
+
+```bash
+PGPASSWORD="${DB_PASSWORD}" psql -h localhost -U eguchi_app -d eguchi_pitch_training -c "\dt"
+PGPASSWORD="${DB_PASSWORD}" psql -h localhost -U eguchi_app -d eguchi_pitch_training -c "SELECT count(*) FROM chord_definitions;"
+```
+
+Expected seed count is `14`.
+
+If the database or role already exists, stop and inspect ownership/privileges before
+rerunning these commands. Do not drop or recreate production objects unless a backup
+and rollback plan have been confirmed.
 
 ## Build And Start
 
@@ -38,6 +79,14 @@ If the PM2 process does not exist yet:
 cd /home/bstalcup/eguchi-pitch-training
 npm run build
 pm2 start npm --name eguchi-pitch-training -- start -- --port 3002
+pm2 save
+```
+
+After setting or changing PM2 environment variables, restart with the updated
+environment:
+
+```bash
+pm2 restart eguchi-pitch-training --update-env
 pm2 save
 ```
 
@@ -78,3 +127,14 @@ pm2 list
 ```
 
 Expected result for both curl commands is an HTTP 200 response.
+
+## Rollback Notes
+
+- If the app fails after an environment change, restore the previous PM2 environment
+  values and run `pm2 restart eguchi-pitch-training --update-env`.
+- If the migration fails partway through, capture the exact error and inspect the
+  database before retrying. The initial table/index creation and chord seed insert
+  are written to tolerate reruns, but a failed production migration should still be
+  reviewed before the app is pointed at it.
+- Keep the previous deploy artifact or git revision available so the app can be
+  rebuilt and restarted if the current revision fails health checks.

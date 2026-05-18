@@ -10,8 +10,10 @@ feat: persist parent child profiles
 
 Tasks:
 
-- Confirm production `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`.
-- Run the initial database migration.
+- Create production database `eguchi_pitch_training` and role `eguchi_app`.
+- Set PM2 `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL=https://eguchi.evidentco.com`.
+- Run `scripts/db/0001_initial_auth_training.sql` as `eguchi_app`.
+- Verify the migration by checking table creation and `14` seeded chord definitions.
 - Make `/dashboard` require a signed-in parent.
 - Add child profile create/list behavior.
 - Replace demo learner cards with parent-scoped database records.
@@ -74,6 +76,6 @@ Tasks:
 
 - Confirm PM2 startup is saved with `pm2 save`.
 - Confirm PM2 resurrect/startup behavior after reboot.
-- Document cert renewal check.
-- Document nginx reload/test commands.
-- Add a short rollback note.
+- Confirm cert renewal check.
+- Confirm nginx reload/test commands.
+- Test the documented rollback path after a non-production PM2 env change.

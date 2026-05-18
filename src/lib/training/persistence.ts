@@ -15,6 +15,39 @@ import {
 } from "./protocol";
 import type { ProgressSnapshot, TrialResult } from "./types";
 
+export type ChildProfileSummary = {
+  id: string;
+  displayName: string;
+  birthYear: number | null;
+  currentLevel: number;
+  progress: ProgressSnapshot;
+};
+
+function toChildSummary(row: {
+  id: string;
+  displayName: string;
+  birthYear: number | null;
+  currentLevel: number;
+  sessionsCompleted: number | null;
+  trialsCompleted: number | null;
+  correctTrials: number | null;
+  recentAccuracy: number | null;
+}): ChildProfileSummary {
+  return {
+    id: row.id,
+    displayName: row.displayName,
+    birthYear: row.birthYear,
+    currentLevel: row.currentLevel,
+    progress: {
+      currentLevel: row.currentLevel,
+      sessionsCompleted: row.sessionsCompleted ?? 0,
+      trialsCompleted: row.trialsCompleted ?? 0,
+      correctTrials: row.correctTrials ?? 0,
+      recentAccuracy: row.recentAccuracy ?? 0,
+    },
+  };
+}
+
 export async function ensureDefaultChordDefinitions() {
   await db
     .insert(chordDefinitions)
@@ -48,6 +81,55 @@ export async function createChildProfile(input: {
     .onConflictDoNothing();
 
   return profile;
+}
+
+export async function listChildProfilesForParent(parentUserId: string): Promise<ChildProfileSummary[]> {
+  const rows = await db
+    .select({
+      id: childProfiles.id,
+      displayName: childProfiles.displayName,
+      birthYear: childProfiles.birthYear,
+      currentLevel: childProfiles.currentLevel,
+      sessionsCompleted: childTrainingProgress.sessionsCompleted,
+      trialsCompleted: childTrainingProgress.trialsCompleted,
+      correctTrials: childTrainingProgress.correctTrials,
+      recentAccuracy: childTrainingProgress.recentAccuracy,
+    })
+    .from(childProfiles)
+    .leftJoin(
+      childTrainingProgress,
+      eq(childTrainingProgress.childProfileId, childProfiles.id),
+    )
+    .where(eq(childProfiles.parentUserId, parentUserId))
+    .orderBy(childProfiles.createdAt);
+
+  return rows.map(toChildSummary);
+}
+
+export async function getChildProfileForParent(
+  parentUserId: string,
+  childProfileId: string,
+): Promise<ChildProfileSummary | null> {
+  const [row] = await db
+    .select({
+      id: childProfiles.id,
+      displayName: childProfiles.displayName,
+      birthYear: childProfiles.birthYear,
+      currentLevel: childProfiles.currentLevel,
+      sessionsCompleted: childTrainingProgress.sessionsCompleted,
+      trialsCompleted: childTrainingProgress.trialsCompleted,
+      correctTrials: childTrainingProgress.correctTrials,
+      recentAccuracy: childTrainingProgress.recentAccuracy,
+    })
+    .from(childProfiles)
+    .leftJoin(
+      childTrainingProgress,
+      eq(childTrainingProgress.childProfileId, childProfiles.id),
+    )
+    .where(and(eq(childProfiles.id, childProfileId), eq(childProfiles.parentUserId, parentUserId)))
+    .limit(1);
+
+  return row ? toChildSummary(row) : null;
 }
 
 export async function assertParentOwnsChild(parentUserId: string, childProfileId: string) {
