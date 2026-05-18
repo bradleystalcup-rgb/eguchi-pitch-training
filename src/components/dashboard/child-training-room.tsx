@@ -17,6 +17,10 @@ type ChildData = {
 
 type ChildResponse = { child?: ChildData };
 
+function clampLevel(level: number | null | undefined) {
+  return Math.max(2, level ?? 2);
+}
+
 export function ChildTrainingRoom({ childId }: { childId: string }) {
   const [child, setChild] = useState<{ name: string; level?: number | null }>();
   const [isLoading, setIsLoading] = useState(true);
@@ -36,7 +40,7 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
           nextChild
             ? {
                 name: nextChild.name ?? nextChild.displayName ?? "Learner",
-                level: nextChild.level ?? nextChild.currentLevel ?? nextChild.progress?.currentLevel ?? 1,
+                level: clampLevel(nextChild.level ?? nextChild.currentLevel ?? nextChild.progress?.currentLevel),
               }
             : undefined,
         );
@@ -67,5 +71,5 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
     );
   }
 
-  return <SessionTrainer childName={child.name} level={child.level ?? 1} />;
+  return <SessionTrainer childId={childId} childName={child.name} level={clampLevel(child.level)} />;
 }
