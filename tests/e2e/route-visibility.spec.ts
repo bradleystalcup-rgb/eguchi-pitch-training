@@ -25,29 +25,29 @@ test.describe("core route visibility", () => {
     ).toBeVisible();
   });
 
-  test("dashboard route shows the learner practice placeholder", async ({
+  test("dashboard route redirects signed-out visitors to sign in", async ({
     page,
   }) => {
     await page.goto("/dashboard");
 
     await expect(
-      page.getByRole("heading", { name: /your practice dashboard/i }),
+      page.getByRole("heading", { name: /welcome back/i }),
     ).toBeVisible();
     await expect(
-      page.getByText(/see your next pitch practice/i),
+      page.getByText(/sign in to keep practicing/i),
     ).toBeVisible();
   });
 
-  test("training route shows the practice room placeholder", async ({
+  test("training route redirects signed-out visitors to sign in", async ({
     page,
   }) => {
     await page.goto("/train/demo-child");
 
     await expect(
-      page.getByRole("heading", { name: /practice room/i }),
+      page.getByRole("heading", { name: /welcome back/i }),
     ).toBeVisible();
     await expect(
-      page.getByText(/warm up your ears/i),
+      page.getByText(/sign in to keep practicing/i),
     ).toBeVisible();
   });
 });
