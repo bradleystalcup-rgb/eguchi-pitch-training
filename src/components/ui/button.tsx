@@ -28,6 +28,23 @@ const sizes: Record<ButtonSize, string> = {
   icon: "h-12 w-12 p-0",
 };
 
+export function buttonVariants({
+  variant = "primary",
+  size = "md",
+  className,
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+} = {}) {
+  return cn(
+    "inline-flex items-center justify-center gap-2 rounded-2xl font-black tracking-normal transition duration-150 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-55 disabled:shadow-none",
+    variants[variant],
+    sizes[size],
+    className,
+  );
+}
+
 export function Button({
   className,
   variant = "primary",
@@ -38,12 +55,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-2xl font-black tracking-normal transition duration-150 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-55 disabled:shadow-none",
-        variants[variant],
-        sizes[size],
-        className,
-      )}
+      className={buttonVariants({ variant, size, className })}
       {...props}
     />
   );

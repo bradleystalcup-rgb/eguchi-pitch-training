@@ -1,13 +1,20 @@
 import Link from "next/link";
-import { BookOpen, Home, Mic2, Sparkles, UserRoundPlus } from "lucide-react";
+import { BookOpen, Home, Sparkles, UserRoundPlus } from "lucide-react";
+import { SignOutButton } from "@/components/auth/sign-out-button";
+import { buttonVariants } from "@/components/ui/button";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/dashboard", label: "Dashboard", icon: BookOpen },
-  { href: "/train/demo-child", label: "Practice", icon: Mic2 },
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  isSignedIn = false,
+}: {
+  children: React.ReactNode;
+  isSignedIn?: boolean;
+}) {
   return (
     <div className="min-h-screen bg-[#fff7d6] text-slate-900">
       <a
@@ -37,7 +44,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-[#118ab2] hover:text-[#075985] focus:outline-none focus:ring-4 focus:ring-[#118ab2]/25"
+                      className={buttonVariants({
+                        variant: "ghost",
+                        size: "sm",
+                        className: "rounded-full shadow-sm",
+                      })}
                     >
                       <Icon aria-hidden="true" className="size-4" />
                       {item.label}
@@ -47,13 +58,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               })}
             </ul>
           </nav>
-          <Link
-            href="/sign-up"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-[#ef476f] px-5 py-2 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#d93d63] focus:outline-none focus:ring-4 focus:ring-[#ef476f]/30"
-          >
-            <UserRoundPlus aria-hidden="true" className="size-4" />
-            Join
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={isSignedIn ? "/dashboard" : "/sign-up"}
+              className={buttonVariants({
+                variant: "secondary",
+                size: "sm",
+                className: "rounded-full shadow-sm",
+              })}
+            >
+              <UserRoundPlus aria-hidden="true" className="size-4" />
+              {isSignedIn ? "Learners" : "Join"}
+            </Link>
+            {isSignedIn ? <SignOutButton /> : null}
+          </div>
         </div>
       </header>
       <main id="main-content" className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">

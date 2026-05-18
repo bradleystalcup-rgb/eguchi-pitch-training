@@ -3,19 +3,21 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
+export type ChildProgressCardProps = {
+  name: string;
+  level: string;
+  weeklyGoalPercent: number;
+  sessionsThisWeek: number;
+  favoriteSkill: string;
+};
+
 export function ChildProgressCard({
   name,
   level,
   weeklyGoalPercent,
   sessionsThisWeek,
   favoriteSkill,
-}: {
-  name: string;
-  level: string;
-  weeklyGoalPercent: number;
-  sessionsThisWeek: number;
-  favoriteSkill: string;
-}) {
+}: ChildProgressCardProps) {
   return (
     <Card className="bg-gradient-to-br from-amber-50 via-white to-sky-50">
       <CardHeader>

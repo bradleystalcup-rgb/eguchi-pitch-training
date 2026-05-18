@@ -1,17 +1,26 @@
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { ArrowLeft, Mic2 } from "lucide-react";
 import Link from "next/link";
 import { AppShell, PlaceholderCard } from "@/components/app-shell";
-import { SessionTrainer } from "@/components/training/session-trainer";
+import { ChildTrainingRoom } from "@/components/dashboard/child-training-room";
+import { auth } from "@/lib/auth";
 
 export default async function TrainingPage({
   params,
 }: {
   params: Promise<{ childId: string }>;
 }) {
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  if (!session) {
+    redirect("/sign-in");
+  }
+
   const { childId } = await params;
 
   return (
-    <AppShell>
+    <AppShell isSignedIn>
       <div className="space-y-8">
         <Link
           href={`/dashboard/children/${childId}`}
@@ -28,7 +37,7 @@ export default async function TrainingPage({
           tone="blue"
         />
 
-        <SessionTrainer childName={childId === "demo-child" ? "Demo learner" : "Pitch pal"} />
+        <ChildTrainingRoom childId={childId} />
       </div>
     </AppShell>
   );

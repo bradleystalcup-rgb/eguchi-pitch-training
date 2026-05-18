@@ -17,6 +17,14 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
   return <div className={cn("mb-4 flex items-start justify-between gap-4", className)} {...props} />;
 }
 
+export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("space-y-4", className)} {...props} />;
+}
+
+export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("mt-5 flex flex-wrap gap-3", className)} {...props} />;
+}
+
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h2
