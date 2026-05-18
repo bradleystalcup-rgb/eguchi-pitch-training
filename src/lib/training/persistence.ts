@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -6,6 +6,7 @@ import {
   childTrainingProgress,
   chordDefinitions,
   trainingSessions,
+  trainingTrials,
 } from "@/lib/db/schema";
 import { DEFAULT_CHORD_DEFINITIONS } from "./chords";
 import {
@@ -14,6 +15,9 @@ import {
   getProtocolLevel,
 } from "./protocol";
 import type { ProgressSnapshot, TrialResult } from "./types";
+
+export const MIN_LEARNER_LEVEL = 2;
+export const MAX_LEARNER_LEVEL = 15;
 
 export type ChildProfileSummary = {
   id: string;
@@ -77,7 +81,7 @@ export async function createChildProfile(input: {
 
   await db
     .insert(childTrainingProgress)
-    .values({ childProfileId: id, currentLevel: 1, updatedAt: now })
+    .values({ childProfileId: id, currentLevel: MIN_LEARNER_LEVEL, updatedAt: now })
     .onConflictDoNothing();
 
   return profile;
@@ -132,6 +136,69 @@ export async function getChildProfileForParent(
   return row ? toChildSummary(row) : null;
 }
 
+export async function updateChildLevelForParent(input: {
+  parentUserId: string;
+  childProfileId: string;
+  level: number;
+}): Promise<ChildProfileSummary | null> {
+  if (!isValidLearnerLevel(input.level)) {
+    throw new Error("Invalid learner level.");
+  }
+
+  const now = new Date();
+
+  const updated = await db.transaction(async (tx) => {
+    const [profile] = await tx
+      .update(childProfiles)
+      .set({ currentLevel: input.level, updatedAt: now })
+      .where(
+        and(
+          eq(childProfiles.id, input.childProfileId),
+          eq(childProfiles.parentUserId, input.parentUserId),
+        ),
+      )
+      .returning({
+        id: childProfiles.id,
+        displayName: childProfiles.displayName,
+        birthYear: childProfiles.birthYear,
+        currentLevel: childProfiles.currentLevel,
+      });
+
+    if (!profile) return null;
+
+    const [progress] = await tx
+      .insert(childTrainingProgress)
+      .values({
+        childProfileId: profile.id,
+        currentLevel: input.level,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: childTrainingProgress.childProfileId,
+        set: {
+          currentLevel: input.level,
+          updatedAt: now,
+        },
+      })
+      .returning({
+        sessionsCompleted: childTrainingProgress.sessionsCompleted,
+        trialsCompleted: childTrainingProgress.trialsCompleted,
+        correctTrials: childTrainingProgress.correctTrials,
+        recentAccuracy: childTrainingProgress.recentAccuracy,
+      });
+
+    return {
+      ...profile,
+      sessionsCompleted: progress?.sessionsCompleted ?? 0,
+      trialsCompleted: progress?.trialsCompleted ?? 0,
+      correctTrials: progress?.correctTrials ?? 0,
+      recentAccuracy: progress?.recentAccuracy ?? 0,
+    };
+  });
+
+  return updated ? toChildSummary(updated) : null;
+}
+
 export async function assertParentOwnsChild(parentUserId: string, childProfileId: string) {
   const [profile] = await db
     .select({ id: childProfiles.id })
@@ -155,7 +222,12 @@ export async function startTrainingSession(input: {
     .where(eq(childTrainingProgress.childProfileId, input.childProfileId))
     .limit(1);
 
-  const level = input.level ?? progress?.currentLevel ?? 1;
+  const level = input.level ?? progress?.currentLevel ?? MIN_LEARNER_LEVEL;
+
+  if (!isValidLearnerLevel(level)) {
+    throw new Error("Invalid learner level.");
+  }
+
   const protocolLevel = getProtocolLevel(level);
 
   const [session] = await db
@@ -176,6 +248,72 @@ export async function startTrainingSession(input: {
   return session;
 }
 
+export async function getTrainingSessionForParent(parentUserId: string, sessionId: string) {
+  const [session] = await db
+    .select()
+    .from(trainingSessions)
+    .where(and(eq(trainingSessions.id, sessionId), eq(trainingSessions.parentUserId, parentUserId)))
+    .limit(1);
+
+  return session ?? null;
+}
+
+export async function recordTrainingAttempt(input: {
+  parentUserId: string;
+  sessionId: string;
+  trialIndex: number;
+  promptChordSlug: string;
+  selectedChordSlug: string;
+  responseMs: number | null;
+}) {
+  const session = await getTrainingSessionForParent(input.parentUserId, input.sessionId);
+
+  if (!session) {
+    return { status: "not_found" as const };
+  }
+
+  if (session.status !== "active") {
+    return { status: "not_active" as const };
+  }
+
+  if (
+    !Number.isInteger(input.trialIndex) ||
+    input.trialIndex < 0 ||
+    input.trialIndex >= session.totalTrials ||
+    !session.chordSet.includes(input.promptChordSlug) ||
+    !session.chordSet.includes(input.selectedChordSlug)
+  ) {
+    return { status: "invalid_attempt" as const };
+  }
+
+  const [chordDefinition] = await db
+    .select({ id: chordDefinitions.id })
+    .from(chordDefinitions)
+    .where(eq(chordDefinitions.slug, input.promptChordSlug))
+    .limit(1);
+
+  if (!chordDefinition) {
+    return { status: "invalid_attempt" as const };
+  }
+
+  const isCorrect = input.promptChordSlug === input.selectedChordSlug;
+  const [trial] = await db
+    .insert(trainingTrials)
+    .values({
+      id: crypto.randomUUID(),
+      sessionId: session.id,
+      chordDefinitionId: chordDefinition.id,
+      trialIndex: input.trialIndex,
+      promptChordSlug: input.promptChordSlug,
+      selectedChordSlug: input.selectedChordSlug,
+      isCorrect,
+      responseMs: input.responseMs,
+    })
+    .returning();
+
+  return { status: "created" as const, trial };
+}
+
 export async function getProgressSnapshot(childProfileId: string): Promise<ProgressSnapshot> {
   const [progress] = await db
     .select()
@@ -184,12 +322,21 @@ export async function getProgressSnapshot(childProfileId: string): Promise<Progr
     .limit(1);
 
   return {
-    currentLevel: progress?.currentLevel ?? 1,
+    currentLevel: progress?.currentLevel ?? MIN_LEARNER_LEVEL,
     sessionsCompleted: progress?.sessionsCompleted ?? 0,
     trialsCompleted: progress?.trialsCompleted ?? 0,
     correctTrials: progress?.correctTrials ?? 0,
     recentAccuracy: progress?.recentAccuracy ?? 0,
   };
+}
+
+export function isValidLearnerLevel(level: unknown): level is number {
+  return (
+    typeof level === "number" &&
+    Number.isInteger(level) &&
+    level >= MIN_LEARNER_LEVEL &&
+    level <= MAX_LEARNER_LEVEL
+  );
 }
 
 export async function completeTrainingSession(input: {
@@ -243,6 +390,46 @@ export async function completeTrainingSession(input: {
   }
 
   return decision;
+}
+
+export async function completeTrainingSessionFromSavedAttempts(input: {
+  parentUserId: string;
+  sessionId: string;
+}) {
+  const session = await getTrainingSessionForParent(input.parentUserId, input.sessionId);
+
+  if (!session) {
+    return { status: "not_found" as const };
+  }
+
+  if (session.status !== "active") {
+    return { status: "not_active" as const };
+  }
+
+  const trials = await db
+    .select({ isCorrect: trainingTrials.isCorrect })
+    .from(trainingTrials)
+    .where(eq(trainingTrials.sessionId, session.id))
+    .orderBy(asc(trainingTrials.trialIndex));
+
+  if (trials.length === 0) {
+    return { status: "empty" as const };
+  }
+
+  const decision = await completeTrainingSession({
+    sessionId: session.id,
+    childProfileId: session.childProfileId,
+    recentResults: trials,
+  });
+
+  return {
+    status: "completed" as const,
+    sessionId: session.id,
+    childProfileId: session.childProfileId,
+    totalTrials: trials.length,
+    correctTrials: trials.filter((trial) => trial.isCorrect).length,
+    decision,
+  };
 }
 
 export async function getLatestCompletedSession(childProfileId: string) {

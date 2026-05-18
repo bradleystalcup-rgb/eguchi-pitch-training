@@ -1,0 +1,97 @@
+import { getCurrentUser } from "@/lib/session";
+import { recordTrainingAttempt } from "@/lib/training/persistence";
+import { errorResponse, isUniqueConstraintError } from "../../../children/_utils";
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ sessionId: string }> },
+) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return errorResponse("unauthorized", "Authentication is required.", 401);
+  }
+
+  const { sessionId } = await params;
+
+  if (!sessionId.trim()) {
+    return errorResponse("bad_request", "sessionId is required.", 400);
+  }
+
+  let payload: unknown;
+
+  try {
+    payload = await request.json();
+  } catch {
+    return errorResponse("bad_request", "Request body must be valid JSON.", 400);
+  }
+
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return errorResponse("bad_request", "Request body must be a JSON object.", 400);
+  }
+
+  const body = payload as Record<string, unknown>;
+  const trialIndex = body.trialIndex;
+  const promptChordSlug = body.promptChordSlug ?? body.chordSlug;
+  const selectedChordSlug = body.selectedChordSlug ?? body.selectedChoiceId;
+  const responseMs = body.responseMs;
+  const validTrialIndex =
+    typeof trialIndex === "number" && Number.isInteger(trialIndex) ? trialIndex : null;
+  const validResponseMs =
+    typeof responseMs === "number" && Number.isInteger(responseMs) ? responseMs : null;
+
+  if (
+    validTrialIndex === null ||
+    typeof promptChordSlug !== "string" ||
+    typeof selectedChordSlug !== "string" ||
+    validResponseMs === null ||
+    validResponseMs < 0 ||
+    validResponseMs > 300_000
+  ) {
+    return errorResponse("bad_request", "Attempt payload is invalid.", 400);
+  }
+
+  try {
+    const result = await recordTrainingAttempt({
+      parentUserId: user.id,
+      sessionId,
+      trialIndex: validTrialIndex,
+      promptChordSlug,
+      selectedChordSlug,
+      responseMs: validResponseMs,
+    });
+
+    if (result.status === "not_found") {
+      return errorResponse("not_found", "Practice session was not found.", 404);
+    }
+
+    if (result.status === "not_active") {
+      return errorResponse("conflict", "Practice session is not active.", 409);
+    }
+
+    if (result.status === "invalid_attempt") {
+      return errorResponse("bad_request", "Attempt payload is invalid for this session.", 400);
+    }
+
+    return Response.json(
+      {
+        attempt: {
+          id: result.trial.id,
+          trialIndex: result.trial.trialIndex,
+          promptChordSlug: result.trial.promptChordSlug,
+          selectedChordSlug: result.trial.selectedChordSlug,
+          isCorrect: result.trial.isCorrect,
+          responseMs: result.trial.responseMs,
+        },
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return errorResponse("conflict", "This trial already has an attempt.", 409);
+    }
+
+    console.error("Failed to record practice attempt", error);
+    return errorResponse("internal_error", "Unable to record practice attempt.", 500);
+  }
+}
