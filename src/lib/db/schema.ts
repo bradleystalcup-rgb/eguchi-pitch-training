@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -8,6 +9,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -86,7 +88,7 @@ export const childProfiles = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     displayName: text("display_name").notNull(),
     birthYear: integer("birth_year"),
-    currentLevel: integer("current_level").notNull().default(1),
+    currentLevel: integer("current_level").notNull().default(2),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -95,6 +97,10 @@ export const childProfiles = pgTable(
     parentDisplayNameUnique: uniqueIndex("child_profiles_parent_display_name_unique").on(
       table.parentUserId,
       table.displayName,
+    ),
+    currentLevelRange: check(
+      "child_profiles_current_level_between_2_and_15",
+      sql`${table.currentLevel} BETWEEN 2 AND 15`,
     ),
   }),
 );
@@ -127,13 +133,19 @@ export const childTrainingProgress = pgTable(
     childProfileId: text("child_profile_id")
       .primaryKey()
       .references(() => childProfiles.id, { onDelete: "cascade" }),
-    currentLevel: integer("current_level").notNull().default(1),
+    currentLevel: integer("current_level").notNull().default(2),
     sessionsCompleted: integer("sessions_completed").notNull().default(0),
     trialsCompleted: integer("trials_completed").notNull().default(0),
     correctTrials: integer("correct_trials").notNull().default(0),
     recentAccuracy: integer("recent_accuracy").notNull().default(0),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
+  (table) => ({
+    currentLevelRange: check(
+      "child_training_progress_current_level_between_2_and_15",
+      sql`${table.currentLevel} BETWEEN 2 AND 15`,
+    ),
+  }),
 );
 
 export const trainingSessions = pgTable(
