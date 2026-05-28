@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS "child_profiles" (
   "display_name" text NOT NULL,
   "birth_year" integer,
   "current_level" integer DEFAULT 1 NOT NULL,
+  "show_color_accessibility_keys" boolean DEFAULT false NOT NULL,
   "created_at" timestamptz DEFAULT now() NOT NULL,
   "updated_at" timestamptz DEFAULT now() NOT NULL
 );
@@ -105,6 +106,7 @@ ON CONFLICT ("slug") DO NOTHING;
 CREATE TABLE IF NOT EXISTS "child_training_progress" (
   "child_profile_id" text PRIMARY KEY NOT NULL REFERENCES "child_profiles"("id") ON DELETE cascade,
   "current_level" integer DEFAULT 1 NOT NULL,
+  "training_phase" text DEFAULT 'chord_identification' NOT NULL,
   "sessions_completed" integer DEFAULT 0 NOT NULL,
   "trials_completed" integer DEFAULT 0 NOT NULL,
   "correct_trials" integer DEFAULT 0 NOT NULL,
@@ -112,13 +114,36 @@ CREATE TABLE IF NOT EXISTS "child_training_progress" (
   "updated_at" timestamptz DEFAULT now() NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS "child_chord_review_state" (
+  "id" text PRIMARY KEY NOT NULL,
+  "child_profile_id" text NOT NULL REFERENCES "child_profiles"("id") ON DELETE cascade,
+  "chord_slug" text NOT NULL,
+  "stability" real DEFAULT 1 NOT NULL,
+  "difficulty" real DEFAULT 5 NOT NULL,
+  "retrievability" real DEFAULT 1 NOT NULL,
+  "attempts" integer DEFAULT 0 NOT NULL,
+  "lapses" integer DEFAULT 0 NOT NULL,
+  "last_response_ms" integer,
+  "last_reviewed_at" timestamptz,
+  "due_at" timestamptz DEFAULT now() NOT NULL,
+  "updated_at" timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "child_chord_review_state_child_chord_unique"
+  ON "child_chord_review_state" ("child_profile_id", "chord_slug");
+CREATE INDEX IF NOT EXISTS "child_chord_review_state_child_due_idx"
+  ON "child_chord_review_state" ("child_profile_id", "due_at");
+
 CREATE TABLE IF NOT EXISTS "training_sessions" (
   "id" text PRIMARY KEY NOT NULL,
   "child_profile_id" text NOT NULL REFERENCES "child_profiles"("id") ON DELETE cascade,
   "parent_user_id" text NOT NULL REFERENCES "user"("id") ON DELETE cascade,
   "protocol_version" text NOT NULL,
   "level" integer NOT NULL,
+  "training_phase" text DEFAULT 'chord_identification' NOT NULL,
   "chord_set" jsonb NOT NULL,
+  "trial_plan" jsonb DEFAULT '[]'::jsonb NOT NULL,
+  "selection_algorithm" text DEFAULT 'random' NOT NULL,
   "status" text DEFAULT 'active' NOT NULL,
   "started_at" timestamptz DEFAULT now() NOT NULL,
   "completed_at" timestamptz,
@@ -138,6 +163,8 @@ CREATE TABLE IF NOT EXISTS "training_trials" (
   "trial_index" integer NOT NULL,
   "prompt_chord_slug" text NOT NULL,
   "selected_chord_slug" text,
+  "selected_notes" jsonb,
+  "selected_tone_note" text,
   "is_correct" boolean NOT NULL,
   "response_ms" integer,
   "created_at" timestamptz DEFAULT now() NOT NULL

@@ -22,3 +22,38 @@ Raises the minimum learner level from 1 to 2.
 - Adds validated PostgreSQL CHECK constraints requiring both `current_level` columns to stay between 2 and 15.
 
 Data backfill is required and included in the migration. Production rollout concern: rows with `current_level` above 15 must be corrected before this migration can validate the new constraints.
+
+## 0003_training_session_trial_plan.sql
+
+Stores the server-issued practice-session trial order in `training_sessions.trial_plan`.
+
+- Adds a non-null JSONB `trial_plan` column with an empty-array default.
+- New sessions persist each issued trial's index and prompt chord slug.
+- Attempt validation can compare submissions against the stored session plan instead of trusting browser-generated prompts.
+
+Existing sessions receive an empty plan. In-progress sessions started before this migration should be restarted before recording new attempts.
+
+## 0004_adaptive_chord_selection.sql
+
+Adds lightweight persistent state for adaptive chord selection.
+
+- Adds `training_sessions.selection_algorithm`, defaulting to `random`.
+- Adds `child_chord_review_state` for per-child/per-chord scheduling state.
+- Stores a compact FSRS-inspired memory state: stability, difficulty, retrievability, due date, attempts, lapses, last response time, and last review time.
+
+This avoids storing or replaying full historical review logs while still giving the server enough data to prioritize weak or due chords across sessions.
+
+## 0005_training_phases.sql
+
+Adds backend support for post-chord-acquisition training phases.
+
+- Adds `child_training_progress.training_phase`, defaulting to `chord_identification`.
+- Adds `training_sessions.training_phase`, defaulting to `chord_identification`.
+- Later phases can represent chord-to-notes, single-note extraction, and maintenance without overloading learner level.
+
+## 0006_color_accessibility_keys.sql
+
+Adds a per-child accessibility preference for color-coded chord buttons.
+
+- Adds `child_profiles.show_color_accessibility_keys`, defaulting to false.
+- Enables parent/student toggles for ColorADD-style color keys without changing the training protocol.

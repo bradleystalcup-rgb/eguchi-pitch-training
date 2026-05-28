@@ -1,6 +1,9 @@
 export type ChordQuality = "major";
 export type TrainingSessionStatus = "active" | "completed" | "abandoned";
 export type TrainingPhase = "white-keys" | "black-keys" | "maintenance";
+export type ChordSelectionAlgorithm = "random" | "adaptive";
+export type TrainingTaskType = "chord_identification" | "chord_notes" | "single_note" | "maintenance";
+export type AnswerMode = "color_choice" | "note_set" | "single_note";
 
 export interface ChordDefinition {
   id: string;
@@ -20,6 +23,7 @@ export interface ProtocolChord extends ChordDefinition {
   colorName: string;
   colorHex: string;
   textClass: string;
+  colorAddKey: string;
   phase: Exclude<TrainingPhase, "maintenance">;
   notes: string[];
   toneNotes: string[];
@@ -42,8 +46,17 @@ export interface TrialResult {
   isCorrect: boolean;
 }
 
+export interface TrainingTrialPlanItem {
+  trialIndex: number;
+  taskType: TrainingTaskType;
+  answerMode: AnswerMode;
+  promptChordSlug: string;
+  isolatedToneNote?: string;
+}
+
 export interface ProgressSnapshot {
   currentLevel: number;
+  trainingPhase: TrainingTaskType;
   sessionsCompleted: number;
   trialsCompleted: number;
   correctTrials: number;
@@ -52,6 +65,8 @@ export interface ProgressSnapshot {
 
 export interface ProgressionDecision {
   nextLevel: number;
+  nextTrainingPhase: TrainingTaskType;
   recentAccuracy: number;
   promoted: boolean;
+  phasePromoted: boolean;
 }

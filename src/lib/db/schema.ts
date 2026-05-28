@@ -4,12 +4,18 @@ import {
   index,
   integer,
   jsonb,
+  real,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type {
+  ChordSelectionAlgorithm,
+  TrainingTaskType,
+  TrainingTrialPlanItem,
+} from "@/lib/training/types";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -89,6 +95,7 @@ export const childProfiles = pgTable(
     displayName: text("display_name").notNull(),
     birthYear: integer("birth_year"),
     currentLevel: integer("current_level").notNull().default(2),
+    showColorAccessibilityKeys: boolean("show_color_accessibility_keys").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -134,6 +141,10 @@ export const childTrainingProgress = pgTable(
       .primaryKey()
       .references(() => childProfiles.id, { onDelete: "cascade" }),
     currentLevel: integer("current_level").notNull().default(2),
+    trainingPhase: text("training_phase")
+      .$type<TrainingTaskType>()
+      .notNull()
+      .default("chord_identification"),
     sessionsCompleted: integer("sessions_completed").notNull().default(0),
     trialsCompleted: integer("trials_completed").notNull().default(0),
     correctTrials: integer("correct_trials").notNull().default(0),
@@ -145,6 +156,33 @@ export const childTrainingProgress = pgTable(
       "child_training_progress_current_level_between_2_and_15",
       sql`${table.currentLevel} BETWEEN 2 AND 15`,
     ),
+  }),
+);
+
+export const childChordReviewState = pgTable(
+  "child_chord_review_state",
+  {
+    id: text("id").primaryKey(),
+    childProfileId: text("child_profile_id")
+      .notNull()
+      .references(() => childProfiles.id, { onDelete: "cascade" }),
+    chordSlug: text("chord_slug").notNull(),
+    stability: real("stability").notNull().default(1),
+    difficulty: real("difficulty").notNull().default(5),
+    retrievability: real("retrievability").notNull().default(1),
+    attempts: integer("attempts").notNull().default(0),
+    lapses: integer("lapses").notNull().default(0),
+    lastResponseMs: integer("last_response_ms"),
+    lastReviewedAt: timestamp("last_reviewed_at", { withTimezone: true }),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    childChordUnique: uniqueIndex("child_chord_review_state_child_chord_unique").on(
+      table.childProfileId,
+      table.chordSlug,
+    ),
+    childDueIdx: index("child_chord_review_state_child_due_idx").on(table.childProfileId, table.dueAt),
   }),
 );
 
@@ -160,7 +198,16 @@ export const trainingSessions = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     protocolVersion: text("protocol_version").notNull(),
     level: integer("level").notNull(),
+    trainingPhase: text("training_phase")
+      .$type<TrainingTaskType>()
+      .notNull()
+      .default("chord_identification"),
     chordSet: jsonb("chord_set").$type<string[]>().notNull(),
+    trialPlan: jsonb("trial_plan").$type<TrainingTrialPlanItem[]>().notNull().default([]),
+    selectionAlgorithm: text("selection_algorithm")
+      .$type<ChordSelectionAlgorithm>()
+      .notNull()
+      .default("random"),
     status: text("status").notNull().default("active"),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -192,6 +239,8 @@ export const trainingTrials = pgTable(
     trialIndex: integer("trial_index").notNull(),
     promptChordSlug: text("prompt_chord_slug").notNull(),
     selectedChordSlug: text("selected_chord_slug"),
+    selectedNotes: jsonb("selected_notes").$type<string[]>(),
+    selectedToneNote: text("selected_tone_note"),
     isCorrect: boolean("is_correct").notNull(),
     responseMs: integer("response_ms"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
