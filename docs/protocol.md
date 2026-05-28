@@ -27,3 +27,6 @@ The first phase uses nine white-key color chords:
 
 After the nine white-key chords are mastered, v1 adds five black-key major
 chords by tone name for a 14-chord essential set.
+
+Protocol levels start with two active colors at level 1, then add one chord at
+each level until the full 14-chord set is active.
