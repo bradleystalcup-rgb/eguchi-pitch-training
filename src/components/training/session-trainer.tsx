@@ -264,8 +264,10 @@ export function SessionTrainer({
   const [isSavingColorKeys, setIsSavingColorKeys] = useState(false);
   const [error, setError] = useState<string>();
   const [levelMessage, setLevelMessage] = useState<string>();
+  const [settingsToast, setSettingsToast] = useState<string>();
   const [summary, setSummary] = useState<{ correct: number; total: number; minutes: number }>();
   const selectChoiceRef = useRef<(choice: ColorChoice) => void>(() => undefined);
+  const settingsToastTimeoutRef = useRef<number | undefined>(undefined);
 
   const current = sessionExercises[index];
   const total = sessionId ? sessionTotalTrials : sessionExercises.length;
@@ -292,9 +294,29 @@ export function SessionTrainer({
     }
   }
 
+  function showSettingsToast() {
+    if (settingsToastTimeoutRef.current) {
+      window.clearTimeout(settingsToastTimeoutRef.current);
+    }
+
+    setSettingsToast(`${childName}'s practice session settings updated`);
+    settingsToastTimeoutRef.current = window.setTimeout(() => {
+      setSettingsToast(undefined);
+      settingsToastTimeoutRef.current = undefined;
+    }, 2400);
+  }
+
   async function handlePlay() {
     await playExercise();
   }
+
+  useEffect(() => {
+    return () => {
+      if (settingsToastTimeoutRef.current) {
+        window.clearTimeout(settingsToastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   function clearAnswerState() {
     setSelectedId(undefined);
@@ -561,6 +583,7 @@ export function SessionTrainer({
       setDraftLevel(nextLevel);
       handleReset();
       setLevelMessage("Level saved.");
+      showSettingsToast();
       setIsSettingsOpen(false);
     } catch {
       setError("We could not save the selected level.");
@@ -584,6 +607,8 @@ export function SessionTrainer({
       if (!response.ok) {
         throw new Error("Unable to save color key preference");
       }
+
+      showSettingsToast();
     } catch {
       setShowColorKeys(!nextValue);
       setError("We could not save the color key setting.");
@@ -656,6 +681,16 @@ export function SessionTrainer({
     );
   }
 
+  const settingsToastElement = settingsToast ? (
+    <div
+      className="fixed bottom-5 left-1/2 z-[60] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-2xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white shadow-xl"
+      role="status"
+      aria-live="polite"
+    >
+      {settingsToast}
+    </div>
+  ) : null;
+
   const settingsSheet = (
     <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
       <SheetContent onClose={() => setIsSettingsOpen(false)}>
@@ -678,7 +713,10 @@ export function SessionTrainer({
           <input
             type="checkbox"
             checked={autoNext}
-            onChange={(event) => setAutoNext(event.target.checked)}
+            onChange={(event) => {
+              setAutoNext(event.target.checked);
+              showSettingsToast();
+            }}
             className="size-6 accent-emerald-500"
           />
         </label>
@@ -699,14 +737,24 @@ export function SessionTrainer({
           <div className="grid grid-cols-2 gap-2">
             <Button
               variant={selectionAlgorithm === "random" ? "secondary" : "ghost"}
-              onClick={() => setSelectionAlgorithm("random")}
+              onClick={() => {
+                if (selectionAlgorithm !== "random") {
+                  setSelectionAlgorithm("random");
+                  showSettingsToast();
+                }
+              }}
               disabled={Boolean(sessionId)}
             >
               Random
             </Button>
             <Button
               variant={selectionAlgorithm === "adaptive" ? "secondary" : "ghost"}
-              onClick={() => setSelectionAlgorithm("adaptive")}
+              onClick={() => {
+                if (selectionAlgorithm !== "adaptive") {
+                  setSelectionAlgorithm("adaptive");
+                  showSettingsToast();
+                }
+              }}
               disabled={Boolean(sessionId)}
             >
               Adaptive
@@ -717,10 +765,26 @@ export function SessionTrainer({
         <div className="space-y-3">
           <Label>Keyboard side</Label>
           <div className="grid grid-cols-2 gap-2">
-            <Button variant={hotkeyMode === "left" ? "secondary" : "ghost"} onClick={() => setHotkeyMode("left")}>
+            <Button
+              variant={hotkeyMode === "left" ? "secondary" : "ghost"}
+              onClick={() => {
+                if (hotkeyMode !== "left") {
+                  setHotkeyMode("left");
+                  showSettingsToast();
+                }
+              }}
+            >
               Left hand
             </Button>
-            <Button variant={hotkeyMode === "right" ? "secondary" : "ghost"} onClick={() => setHotkeyMode("right")}>
+            <Button
+              variant={hotkeyMode === "right" ? "secondary" : "ghost"}
+              onClick={() => {
+                if (hotkeyMode !== "right") {
+                  setHotkeyMode("right");
+                  showSettingsToast();
+                }
+              }}
+            >
               Right hand
             </Button>
           </div>
@@ -729,10 +793,26 @@ export function SessionTrainer({
         <div className="space-y-3">
           <Label>Note names</Label>
           <div className="grid grid-cols-2 gap-2">
-            <Button variant={accidentalMode === "sharps" ? "secondary" : "ghost"} onClick={() => setAccidentalMode("sharps")}>
+            <Button
+              variant={accidentalMode === "sharps" ? "secondary" : "ghost"}
+              onClick={() => {
+                if (accidentalMode !== "sharps") {
+                  setAccidentalMode("sharps");
+                  showSettingsToast();
+                }
+              }}
+            >
               Sharps
             </Button>
-            <Button variant={accidentalMode === "flats" ? "secondary" : "ghost"} onClick={() => setAccidentalMode("flats")}>
+            <Button
+              variant={accidentalMode === "flats" ? "secondary" : "ghost"}
+              onClick={() => {
+                if (accidentalMode !== "flats") {
+                  setAccidentalMode("flats");
+                  showSettingsToast();
+                }
+              }}
+            >
               Flats
             </Button>
           </div>
@@ -893,6 +973,7 @@ export function SessionTrainer({
         </div>
 
         {settingsSheet}
+        {settingsToastElement}
       </div>
     );
   }
@@ -929,6 +1010,7 @@ export function SessionTrainer({
       </div>
 
       {settingsSheet}
+      {settingsToastElement}
     </Card>
   );
 }
