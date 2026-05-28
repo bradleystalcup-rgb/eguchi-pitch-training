@@ -47,11 +47,35 @@ Response:
 
 Request body:
 
+For `answerMode: "color_choice"`:
+
 ```json
 {
   "trialIndex": 0,
   "promptChordSlug": "white-red-ceg",
   "selectedChordSlug": "white-yellow-cfa",
+  "responseMs": 1800
+}
+```
+
+For `answerMode: "note_set"`:
+
+```json
+{
+  "trialIndex": 0,
+  "promptChordSlug": "white-red-ceg",
+  "selectedNotes": ["C", "E", "G"],
+  "responseMs": 1800
+}
+```
+
+For `answerMode: "single_note"`:
+
+```json
+{
+  "trialIndex": 0,
+  "promptChordSlug": "white-red-ceg",
+  "selectedToneNote": "G4",
   "responseMs": 1800
 }
 ```
@@ -66,6 +90,8 @@ Response:
     "trialIndex": 0,
     "promptChordSlug": "white-red-ceg",
     "selectedChordSlug": "white-yellow-cfa",
+    "selectedNotes": null,
+    "selectedToneNote": null,
     "isCorrect": false,
     "responseMs": 1800
   },

@@ -71,6 +71,22 @@ function isolatedToneNoteForTask(input: {
   return `${pitchNames[midiNote % 12]}${Math.floor(midiNote / 12) - 1}`;
 }
 
+function normalizeNoteName(note: string) {
+  return note.trim().replace("♯", "#").toUpperCase();
+}
+
+function normalizeToneNote(note: string) {
+  const normalized = note.trim().replace("♯", "#").toUpperCase();
+  return normalized.replace(/^([A-G]#?)(-?\d+)$/, (_, pitch: string, octave: string) => `${pitch}${octave}`);
+}
+
+function noteSetsMatch(selectedNotes: readonly string[], expectedNotes: readonly string[]) {
+  const selected = [...new Set(selectedNotes.map(normalizeNoteName))].sort();
+  const expected = [...new Set(expectedNotes.map(normalizeNoteName))].sort();
+
+  return selected.length === expected.length && selected.every((note, index) => note === expected[index]);
+}
+
 async function chooseAdaptiveChordSlug(input: {
   childProfileId: string;
   chordSlugs: readonly string[];
@@ -530,7 +546,9 @@ export async function recordTrainingAttempt(input: {
   sessionId: string;
   trialIndex: number;
   promptChordSlug: string;
-  selectedChordSlug: string;
+  selectedChordSlug?: string | null;
+  selectedNotes?: string[] | null;
+  selectedToneNote?: string | null;
   responseMs: number | null;
 }) {
   const session = await getTrainingSessionForParent(input.parentUserId, input.sessionId);
@@ -553,14 +571,16 @@ export async function recordTrainingAttempt(input: {
     !Number.isInteger(input.trialIndex) ||
     input.trialIndex < 0 ||
     input.trialIndex >= session.totalTrials ||
-    plannedTrial.promptChordSlug !== input.promptChordSlug ||
-    !session.chordSet.includes(input.selectedChordSlug)
+    plannedTrial.promptChordSlug !== input.promptChordSlug
   ) {
     return { status: "invalid_attempt" as const };
   }
 
   const [chordDefinition] = await db
-    .select({ id: chordDefinitions.id })
+    .select({
+      id: chordDefinitions.id,
+      displayNotes: chordDefinitions.displayNotes,
+    })
     .from(chordDefinitions)
     .where(eq(chordDefinitions.slug, input.promptChordSlug))
     .limit(1);
@@ -569,7 +589,28 @@ export async function recordTrainingAttempt(input: {
     return { status: "invalid_attempt" as const };
   }
 
-  const isCorrect = input.promptChordSlug === input.selectedChordSlug;
+  let isCorrect = false;
+
+  if (plannedTrial.answerMode === "color_choice") {
+    if (!input.selectedChordSlug || !session.chordSet.includes(input.selectedChordSlug)) {
+      return { status: "invalid_attempt" as const };
+    }
+
+    isCorrect = input.promptChordSlug === input.selectedChordSlug;
+  } else if (plannedTrial.answerMode === "note_set") {
+    if (!input.selectedNotes?.length) {
+      return { status: "invalid_attempt" as const };
+    }
+
+    isCorrect = noteSetsMatch(input.selectedNotes, chordDefinition.displayNotes);
+  } else if (plannedTrial.answerMode === "single_note") {
+    if (!input.selectedToneNote || !plannedTrial.isolatedToneNote) {
+      return { status: "invalid_attempt" as const };
+    }
+
+    isCorrect = normalizeToneNote(input.selectedToneNote) === normalizeToneNote(plannedTrial.isolatedToneNote);
+  }
+
   await updateChordReviewState({
     childProfileId: session.childProfileId,
     chordSlug: input.promptChordSlug,
@@ -596,7 +637,9 @@ export async function recordTrainingAttempt(input: {
       chordDefinitionId: chordDefinition.id,
       trialIndex: input.trialIndex,
       promptChordSlug: input.promptChordSlug,
-      selectedChordSlug: input.selectedChordSlug,
+      selectedChordSlug: input.selectedChordSlug ?? null,
+      selectedNotes: input.selectedNotes ?? null,
+      selectedToneNote: input.selectedToneNote ?? null,
       isCorrect,
       responseMs: input.responseMs,
     })

@@ -35,16 +35,28 @@ export async function POST(
   const trialIndex = body.trialIndex;
   const promptChordSlug = body.promptChordSlug ?? body.chordSlug;
   const selectedChordSlug = body.selectedChordSlug ?? body.selectedChoiceId;
+  const selectedNotes = body.selectedNotes;
+  const selectedToneNote = body.selectedToneNote;
   const responseMs = body.responseMs;
   const validTrialIndex =
     typeof trialIndex === "number" && Number.isInteger(trialIndex) ? trialIndex : null;
   const validResponseMs =
     typeof responseMs === "number" && Number.isInteger(responseMs) ? responseMs : null;
+  const validSelectedNotes =
+    Array.isArray(selectedNotes) &&
+    selectedNotes.length > 0 &&
+    selectedNotes.length <= 8 &&
+    selectedNotes.every((note) => typeof note === "string" && note.trim().length > 0 && note.length <= 8)
+      ? selectedNotes.map((note) => note.trim())
+      : null;
 
   if (
     validTrialIndex === null ||
     typeof promptChordSlug !== "string" ||
-    typeof selectedChordSlug !== "string" ||
+    (selectedChordSlug !== undefined && typeof selectedChordSlug !== "string") ||
+    (selectedNotes !== undefined && validSelectedNotes === null) ||
+    (selectedToneNote !== undefined &&
+      (typeof selectedToneNote !== "string" || !selectedToneNote.trim() || selectedToneNote.length > 8)) ||
     validResponseMs === null ||
     validResponseMs < 0 ||
     validResponseMs > 300_000
@@ -58,7 +70,9 @@ export async function POST(
       sessionId,
       trialIndex: validTrialIndex,
       promptChordSlug,
-      selectedChordSlug,
+      selectedChordSlug: typeof selectedChordSlug === "string" ? selectedChordSlug : null,
+      selectedNotes: validSelectedNotes,
+      selectedToneNote: typeof selectedToneNote === "string" ? selectedToneNote.trim() : null,
       responseMs: validResponseMs,
     });
 
@@ -90,6 +104,8 @@ export async function POST(
           trialIndex: result.trial.trialIndex,
           promptChordSlug: result.trial.promptChordSlug,
           selectedChordSlug: result.trial.selectedChordSlug,
+          selectedNotes: result.trial.selectedNotes,
+          selectedToneNote: result.trial.selectedToneNote,
           isCorrect: result.trial.isCorrect,
           responseMs: result.trial.responseMs,
         },

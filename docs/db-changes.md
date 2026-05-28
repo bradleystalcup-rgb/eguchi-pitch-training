@@ -57,3 +57,11 @@ Adds a per-child accessibility preference for color-coded chord buttons.
 
 - Adds `child_profiles.show_color_accessibility_keys`, defaulting to false.
 - Enables parent/student toggles for ColorADD-style color keys without changing the training protocol.
+
+## 0007_attempt_answer_modes.sql
+
+Adds storage for non-color-choice answers.
+
+- Adds `training_trials.selected_notes` for chord-to-notes attempts.
+- Adds `training_trials.selected_tone_note` for single-note extraction attempts.
+- Existing `selected_chord_slug` remains the answer field for color-choice chord identification.
