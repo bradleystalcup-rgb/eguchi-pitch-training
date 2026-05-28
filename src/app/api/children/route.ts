@@ -18,6 +18,7 @@ function childResponse(child: ChildProfileSummary) {
     birthYear: child.birthYear,
     level: child.currentLevel,
     currentLevel: child.currentLevel,
+    showColorAccessibilityKeys: child.showColorAccessibilityKeys,
     progress: child.progress,
   };
 }
@@ -73,8 +74,10 @@ export async function POST(request: Request) {
           displayName: child.displayName,
           birthYear: child.birthYear,
           currentLevel: child.currentLevel,
+          showColorAccessibilityKeys: child.showColorAccessibilityKeys,
           progress: {
             currentLevel: child.currentLevel,
+            trainingPhase: "chord_identification",
             sessionsCompleted: 0,
             trialsCompleted: 0,
             correctTrials: 0,

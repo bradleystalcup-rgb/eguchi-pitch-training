@@ -2,6 +2,7 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
+  childChordReviewState,
   childProfiles,
   childTrainingProgress,
   chordDefinitions,
@@ -14,7 +15,19 @@ import {
   calculateProgression,
   getProtocolLevel,
 } from "./protocol";
-import type { ProgressSnapshot, TrialResult } from "./types";
+import {
+  chooseAdaptiveChordSlug as chooseAdaptiveChordSlugFromState,
+  chooseNextTrialFromAttempt,
+  chooseRandomChordSlug,
+  createTrialPlanItem,
+} from "./scheduler";
+import type {
+  ChordSelectionAlgorithm,
+  ProgressSnapshot,
+  TrainingTaskType,
+  TrainingTrialPlanItem,
+  TrialResult,
+} from "./types";
 
 export const MIN_LEARNER_LEVEL = 2;
 export const MAX_LEARNER_LEVEL = 15;
@@ -24,14 +37,195 @@ export type ChildProfileSummary = {
   displayName: string;
   birthYear: number | null;
   currentLevel: number;
+  showColorAccessibilityKeys: boolean;
   progress: ProgressSnapshot;
 };
+
+export function isValidChordSelectionAlgorithm(
+  value: unknown,
+): value is ChordSelectionAlgorithm {
+  return value === "random" || value === "adaptive";
+}
+
+export function isValidTrainingTaskType(value: unknown): value is TrainingTaskType {
+  return (
+    value === "chord_identification" ||
+    value === "chord_notes" ||
+    value === "single_note" ||
+    value === "maintenance"
+  );
+}
+
+function isolatedToneNoteForTask(input: {
+  taskType: TrainingTaskType;
+  promptChordSlug: string;
+}) {
+  if (input.taskType !== "single_note") return undefined;
+
+  const chord = DEFAULT_CHORD_DEFINITIONS.find((definition) => definition.slug === input.promptChordSlug);
+  const midiNote = chord?.midiNotes[chord.midiNotes.length - 1];
+
+  if (midiNote === undefined) return undefined;
+
+  const pitchNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  return `${pitchNames[midiNote % 12]}${Math.floor(midiNote / 12) - 1}`;
+}
+
+async function chooseAdaptiveChordSlug(input: {
+  childProfileId: string;
+  chordSlugs: readonly string[];
+  previousChordSlug?: string;
+}) {
+  if (input.chordSlugs.length <= 1) return input.chordSlugs[0];
+
+  const states = await db
+    .select()
+    .from(childChordReviewState)
+    .where(eq(childChordReviewState.childProfileId, input.childProfileId));
+  return chooseAdaptiveChordSlugFromState({
+    chordSlugs: input.chordSlugs,
+    previousChordSlug: input.previousChordSlug,
+    reviewStates: states,
+  });
+}
+
+async function chooseChordSlug(input: {
+  childProfileId: string;
+  chordSlugs: readonly string[];
+  selectionAlgorithm: ChordSelectionAlgorithm;
+  previousChordSlug?: string;
+}) {
+  if (input.selectionAlgorithm === "adaptive") {
+    return chooseAdaptiveChordSlug(input);
+  }
+
+  return chooseRandomChordSlug(input.chordSlugs, input.previousChordSlug);
+}
+
+async function buildFirstTrial(input: {
+  childProfileId: string;
+  chordSlugs: readonly string[];
+  selectionAlgorithm: ChordSelectionAlgorithm;
+  taskType: TrainingTaskType;
+}): Promise<TrainingTrialPlanItem> {
+  const promptChordSlug = await chooseChordSlug(input);
+
+  return createTrialPlanItem({
+    trialIndex: 0,
+    taskType: input.taskType,
+    promptChordSlug,
+    isolatedToneNote: isolatedToneNoteForTask({ taskType: input.taskType, promptChordSlug }),
+  });
+}
+
+async function chooseNextTrial(input: {
+  childProfileId: string;
+  chordSlugs: readonly string[];
+  selectionAlgorithm: ChordSelectionAlgorithm;
+  taskType: TrainingTaskType;
+  currentTrialIndex: number;
+  currentPromptChordSlug: string;
+  isCorrect: boolean;
+  responseMs: number | null;
+  totalTrials: number;
+}): Promise<TrainingTrialPlanItem | null> {
+  return chooseNextTrialFromAttempt({
+    ...input,
+    chooseChordSlug,
+    isolatedToneNoteForTask,
+  });
+}
+
+function ratingForAttempt(isCorrect: boolean, responseMs: number | null) {
+  if (!isCorrect) return 1;
+  if (responseMs === null || responseMs > 6_000) return 2;
+  if (responseMs <= 2_500) return 4;
+  return 3;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+async function updateChordReviewState(input: {
+  childProfileId: string;
+  chordSlug: string;
+  isCorrect: boolean;
+  responseMs: number | null;
+}) {
+  const now = new Date();
+  const rating = ratingForAttempt(input.isCorrect, input.responseMs);
+  const [state] = await db
+    .select()
+    .from(childChordReviewState)
+    .where(
+      and(
+        eq(childChordReviewState.childProfileId, input.childProfileId),
+        eq(childChordReviewState.chordSlug, input.chordSlug),
+      ),
+    )
+    .limit(1);
+  const previousStability = state?.stability ?? 1;
+  const previousDifficulty = state?.difficulty ?? 5;
+  const lastReviewedAt = state?.lastReviewedAt;
+  const elapsedDays = lastReviewedAt
+    ? Math.max(0, (now.getTime() - lastReviewedAt.getTime()) / 86_400_000)
+    : 0;
+  const retrievability = clampNumber(Math.pow(0.9, elapsedDays / Math.max(0.25, previousStability)), 0, 1);
+  const nextDifficulty = clampNumber(previousDifficulty + (3 - rating) * 0.7, 1, 10);
+  const nextStability = input.isCorrect
+    ? clampNumber(previousStability * (1 + (11 - nextDifficulty) * 0.06 * (1.2 - retrievability)), 0.25, 365)
+    : clampNumber(previousStability * 0.35, 0.25, 365);
+  const intervalHours = input.isCorrect
+    ? rating === 4
+      ? Math.max(12, nextStability * 24)
+      : rating === 3
+        ? Math.max(6, nextStability * 12)
+        : Math.max(1, nextStability * 3)
+    : 0.05;
+  const dueAt = new Date(now.getTime() + intervalHours * 3_600_000);
+
+  if (state) {
+    await db
+      .update(childChordReviewState)
+      .set({
+        stability: nextStability,
+        difficulty: nextDifficulty,
+        retrievability,
+        attempts: state.attempts + 1,
+        lapses: state.lapses + Number(!input.isCorrect),
+        lastResponseMs: input.responseMs,
+        lastReviewedAt: now,
+        dueAt,
+        updatedAt: now,
+      })
+      .where(eq(childChordReviewState.id, state.id));
+    return;
+  }
+
+  await db.insert(childChordReviewState).values({
+    id: crypto.randomUUID(),
+    childProfileId: input.childProfileId,
+    chordSlug: input.chordSlug,
+    stability: nextStability,
+    difficulty: nextDifficulty,
+    retrievability,
+    attempts: 1,
+    lapses: Number(!input.isCorrect),
+    lastResponseMs: input.responseMs,
+    lastReviewedAt: now,
+    dueAt,
+    updatedAt: now,
+  });
+}
 
 function toChildSummary(row: {
   id: string;
   displayName: string;
   birthYear: number | null;
   currentLevel: number;
+  showColorAccessibilityKeys: boolean;
+  trainingPhase: TrainingTaskType | null;
   sessionsCompleted: number | null;
   trialsCompleted: number | null;
   correctTrials: number | null;
@@ -42,8 +236,10 @@ function toChildSummary(row: {
     displayName: row.displayName,
     birthYear: row.birthYear,
     currentLevel: row.currentLevel,
+    showColorAccessibilityKeys: row.showColorAccessibilityKeys,
     progress: {
       currentLevel: row.currentLevel,
+      trainingPhase: row.trainingPhase ?? "chord_identification",
       sessionsCompleted: row.sessionsCompleted ?? 0,
       trialsCompleted: row.trialsCompleted ?? 0,
       correctTrials: row.correctTrials ?? 0,
@@ -81,7 +277,12 @@ export async function createChildProfile(input: {
 
   await db
     .insert(childTrainingProgress)
-    .values({ childProfileId: id, currentLevel: MIN_LEARNER_LEVEL, updatedAt: now })
+    .values({
+      childProfileId: id,
+      currentLevel: MIN_LEARNER_LEVEL,
+      trainingPhase: "chord_identification",
+      updatedAt: now,
+    })
     .onConflictDoNothing();
 
   return profile;
@@ -94,6 +295,8 @@ export async function listChildProfilesForParent(parentUserId: string): Promise<
       displayName: childProfiles.displayName,
       birthYear: childProfiles.birthYear,
       currentLevel: childProfiles.currentLevel,
+      showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
+      trainingPhase: childTrainingProgress.trainingPhase,
       sessionsCompleted: childTrainingProgress.sessionsCompleted,
       trialsCompleted: childTrainingProgress.trialsCompleted,
       correctTrials: childTrainingProgress.correctTrials,
@@ -120,6 +323,8 @@ export async function getChildProfileForParent(
       displayName: childProfiles.displayName,
       birthYear: childProfiles.birthYear,
       currentLevel: childProfiles.currentLevel,
+      showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
+      trainingPhase: childTrainingProgress.trainingPhase,
       sessionsCompleted: childTrainingProgress.sessionsCompleted,
       trialsCompleted: childTrainingProgress.trialsCompleted,
       correctTrials: childTrainingProgress.correctTrials,
@@ -162,6 +367,7 @@ export async function updateChildLevelForParent(input: {
         displayName: childProfiles.displayName,
         birthYear: childProfiles.birthYear,
         currentLevel: childProfiles.currentLevel,
+        showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
       });
 
     if (!profile) return null;
@@ -171,16 +377,19 @@ export async function updateChildLevelForParent(input: {
       .values({
         childProfileId: profile.id,
         currentLevel: input.level,
+        trainingPhase: "chord_identification",
         updatedAt: now,
       })
       .onConflictDoUpdate({
         target: childTrainingProgress.childProfileId,
         set: {
           currentLevel: input.level,
+          trainingPhase: "chord_identification",
           updatedAt: now,
         },
       })
       .returning({
+        trainingPhase: childTrainingProgress.trainingPhase,
         sessionsCompleted: childTrainingProgress.sessionsCompleted,
         trialsCompleted: childTrainingProgress.trialsCompleted,
         correctTrials: childTrainingProgress.correctTrials,
@@ -189,6 +398,8 @@ export async function updateChildLevelForParent(input: {
 
     return {
       ...profile,
+      showColorAccessibilityKeys: profile.showColorAccessibilityKeys,
+      trainingPhase: progress?.trainingPhase ?? "chord_identification",
       sessionsCompleted: progress?.sessionsCompleted ?? 0,
       trialsCompleted: progress?.trialsCompleted ?? 0,
       correctTrials: progress?.correctTrials ?? 0,
@@ -197,6 +408,42 @@ export async function updateChildLevelForParent(input: {
   });
 
   return updated ? toChildSummary(updated) : null;
+}
+
+export async function updateChildColorAccessibilityForParent(input: {
+  parentUserId: string;
+  childProfileId: string;
+  showColorAccessibilityKeys: boolean;
+}): Promise<ChildProfileSummary | null> {
+  const now = new Date();
+  const [profile] = await db
+    .update(childProfiles)
+    .set({
+      showColorAccessibilityKeys: input.showColorAccessibilityKeys,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(childProfiles.id, input.childProfileId),
+        eq(childProfiles.parentUserId, input.parentUserId),
+      ),
+    )
+    .returning({
+      id: childProfiles.id,
+      displayName: childProfiles.displayName,
+      birthYear: childProfiles.birthYear,
+      currentLevel: childProfiles.currentLevel,
+      showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
+    });
+
+  if (!profile) return null;
+
+  const progress = await getProgressSnapshot(profile.id);
+
+  return {
+    ...profile,
+    progress,
+  };
 }
 
 export async function assertParentOwnsChild(parentUserId: string, childProfileId: string) {
@@ -213,22 +460,39 @@ export async function startTrainingSession(input: {
   parentUserId: string;
   childProfileId: string;
   level?: number;
+  selectionAlgorithm?: ChordSelectionAlgorithm;
 }) {
   await assertParentOwnsChild(input.parentUserId, input.childProfileId);
 
   const [progress] = await db
-    .select({ currentLevel: childTrainingProgress.currentLevel })
+    .select({
+      currentLevel: childTrainingProgress.currentLevel,
+      trainingPhase: childTrainingProgress.trainingPhase,
+    })
     .from(childTrainingProgress)
     .where(eq(childTrainingProgress.childProfileId, input.childProfileId))
     .limit(1);
 
   const level = input.level ?? progress?.currentLevel ?? MIN_LEARNER_LEVEL;
+  const trainingPhase = progress?.trainingPhase ?? "chord_identification";
 
   if (!isValidLearnerLevel(level)) {
     throw new Error("Invalid learner level.");
   }
 
   const protocolLevel = getProtocolLevel(level);
+  const selectionAlgorithm = input.selectionAlgorithm ?? "random";
+
+  if (!isValidChordSelectionAlgorithm(selectionAlgorithm)) {
+    throw new Error("Invalid chord selection algorithm.");
+  }
+
+  const firstTrial = await buildFirstTrial({
+    childProfileId: input.childProfileId,
+    chordSlugs: protocolLevel.chordSlugs,
+    selectionAlgorithm,
+    taskType: trainingPhase,
+  });
 
   const [session] = await db
     .insert(trainingSessions)
@@ -238,7 +502,10 @@ export async function startTrainingSession(input: {
       parentUserId: input.parentUserId,
       protocolVersion: DEFAULT_PROTOCOL_VERSION,
       level,
+      trainingPhase,
       chordSet: protocolLevel.chordSlugs,
+      trialPlan: [firstTrial],
+      selectionAlgorithm,
       status: "active",
       totalTrials: protocolLevel.trialsPerSession,
       correctTrials: 0,
@@ -276,11 +543,17 @@ export async function recordTrainingAttempt(input: {
     return { status: "not_active" as const };
   }
 
+  const plannedTrial = session.trialPlan.find((trial) => trial.trialIndex === input.trialIndex);
+
+  if (!plannedTrial) {
+    return { status: "invalid_attempt" as const };
+  }
+
   if (
     !Number.isInteger(input.trialIndex) ||
     input.trialIndex < 0 ||
     input.trialIndex >= session.totalTrials ||
-    !session.chordSet.includes(input.promptChordSlug) ||
+    plannedTrial.promptChordSlug !== input.promptChordSlug ||
     !session.chordSet.includes(input.selectedChordSlug)
   ) {
     return { status: "invalid_attempt" as const };
@@ -297,6 +570,24 @@ export async function recordTrainingAttempt(input: {
   }
 
   const isCorrect = input.promptChordSlug === input.selectedChordSlug;
+  await updateChordReviewState({
+    childProfileId: session.childProfileId,
+    chordSlug: input.promptChordSlug,
+    isCorrect,
+    responseMs: input.responseMs,
+  });
+
+  const nextTrial = await chooseNextTrial({
+    childProfileId: session.childProfileId,
+    chordSlugs: session.chordSet,
+    selectionAlgorithm: session.selectionAlgorithm,
+    taskType: session.trainingPhase,
+    currentTrialIndex: input.trialIndex,
+    currentPromptChordSlug: input.promptChordSlug,
+    isCorrect,
+    responseMs: input.responseMs,
+    totalTrials: session.totalTrials,
+  });
   const [trial] = await db
     .insert(trainingTrials)
     .values({
@@ -311,7 +602,16 @@ export async function recordTrainingAttempt(input: {
     })
     .returning();
 
-  return { status: "created" as const, trial };
+  if (nextTrial) {
+    await db
+      .update(trainingSessions)
+      .set({
+        trialPlan: [...session.trialPlan, nextTrial],
+      })
+      .where(eq(trainingSessions.id, session.id));
+  }
+
+  return { status: "created" as const, session, trial, nextTrial };
 }
 
 export async function getProgressSnapshot(childProfileId: string): Promise<ProgressSnapshot> {
@@ -323,6 +623,7 @@ export async function getProgressSnapshot(childProfileId: string): Promise<Progr
 
   return {
     currentLevel: progress?.currentLevel ?? MIN_LEARNER_LEVEL,
+    trainingPhase: progress?.trainingPhase ?? "chord_identification",
     sessionsCompleted: progress?.sessionsCompleted ?? 0,
     trialsCompleted: progress?.trialsCompleted ?? 0,
     correctTrials: progress?.correctTrials ?? 0,
@@ -342,10 +643,15 @@ export function isValidLearnerLevel(level: unknown): level is number {
 export async function completeTrainingSession(input: {
   sessionId: string;
   childProfileId: string;
+  trainingPhase: TrainingTaskType;
   recentResults: readonly TrialResult[];
 }) {
   const snapshot = await getProgressSnapshot(input.childProfileId);
-  const decision = calculateProgression(snapshot.currentLevel, input.recentResults);
+  const decision = calculateProgression(
+    snapshot.currentLevel,
+    input.trainingPhase,
+    input.recentResults,
+  );
   const correctTrials = input.recentResults.filter((result) => result.isCorrect).length;
   const now = new Date();
 
@@ -364,6 +670,7 @@ export async function completeTrainingSession(input: {
     .values({
       childProfileId: input.childProfileId,
       currentLevel: decision.nextLevel,
+      trainingPhase: decision.nextTrainingPhase,
       sessionsCompleted: 1,
       trialsCompleted: input.recentResults.length,
       correctTrials,
@@ -374,6 +681,7 @@ export async function completeTrainingSession(input: {
       target: childTrainingProgress.childProfileId,
       set: {
         currentLevel: decision.nextLevel,
+        trainingPhase: decision.nextTrainingPhase,
         sessionsCompleted: sql`${childTrainingProgress.sessionsCompleted} + 1`,
         trialsCompleted: sql`${childTrainingProgress.trialsCompleted} + ${input.recentResults.length}`,
         correctTrials: sql`${childTrainingProgress.correctTrials} + ${correctTrials}`,
@@ -386,6 +694,13 @@ export async function completeTrainingSession(input: {
     await db
       .update(childProfiles)
       .set({ currentLevel: decision.nextLevel, updatedAt: now })
+      .where(eq(childProfiles.id, input.childProfileId));
+  }
+
+  if (decision.phasePromoted) {
+    await db
+      .update(childProfiles)
+      .set({ updatedAt: now })
       .where(eq(childProfiles.id, input.childProfileId));
   }
 
@@ -419,6 +734,7 @@ export async function completeTrainingSessionFromSavedAttempts(input: {
   const decision = await completeTrainingSession({
     sessionId: session.id,
     childProfileId: session.childProfileId,
+    trainingPhase: session.trainingPhase,
     recentResults: trials,
   });
 

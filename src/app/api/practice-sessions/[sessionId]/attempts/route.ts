@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@/lib/session";
+import { getActiveChordsForLevel } from "@/lib/training/protocol";
 import { recordTrainingAttempt } from "@/lib/training/persistence";
 import { errorResponse, isUniqueConstraintError } from "../../../children/_utils";
 
@@ -73,6 +74,15 @@ export async function POST(
       return errorResponse("bad_request", "Attempt payload is invalid for this session.", 400);
     }
 
+    const chords = getActiveChordsForLevel(result.session.level);
+    const nextChord = result.nextTrial
+      ? chords.find((chord) => chord.slug === result.nextTrial?.promptChordSlug)
+      : undefined;
+
+    if (result.nextTrial && !nextChord) {
+      return errorResponse("internal_error", "Practice session referenced an unknown chord.", 500);
+    }
+
     return Response.json(
       {
         attempt: {
@@ -82,6 +92,25 @@ export async function POST(
           selectedChordSlug: result.trial.selectedChordSlug,
           isCorrect: result.trial.isCorrect,
           responseMs: result.trial.responseMs,
+        },
+        nextTrial:
+          result.nextTrial && nextChord
+            ? {
+                trialIndex: result.nextTrial.trialIndex,
+                taskType: result.nextTrial.taskType,
+                answerMode: result.nextTrial.answerMode,
+                promptChordSlug: nextChord.slug,
+                prompt: nextChord.phase === "white-keys" ? "Choose the color flag." : "Choose the chord name.",
+                toneNotes: nextChord.toneNotes,
+                isolatedToneNote: result.nextTrial.isolatedToneNote,
+                correctChoiceId: nextChord.slug,
+              }
+            : null,
+        session: {
+          status: result.nextTrial ? "active" : "ready_to_complete",
+          trainingPhase: result.session.trainingPhase,
+          answeredTrials: result.trial.trialIndex + 1,
+          totalTrials: result.session.totalTrials,
         },
       },
       { status: 201 },

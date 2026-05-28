@@ -1,5 +1,11 @@
 import { DEFAULT_CHORD_DEFINITIONS } from "./chords";
-import type { ProgressionDecision, ProtocolChord, ProtocolLevel, TrialResult } from "./types";
+import type {
+  ProgressionDecision,
+  ProtocolChord,
+  ProtocolLevel,
+  TrainingTaskType,
+  TrialResult,
+} from "./types";
 
 export const DEFAULT_PROTOCOL_VERSION = "eguchi-cim-v1";
 
@@ -17,18 +23,24 @@ const levelDefaults = {
 };
 
 export const DEFAULT_PROTOCOL_LEVELS = [
-  ...whiteChordSlugs.map((_, index) => ({
+  ...whiteChordSlugs.slice(0, -1).map((_, index) => ({
     level: index + 1,
     phase: "white-keys" as const,
-    chordSlugs: whiteChordSlugs.slice(0, index + 1),
+    chordSlugs: whiteChordSlugs.slice(0, index + 2),
     ...levelDefaults,
   })),
   ...blackChordSlugs.map((_, index) => ({
-    level: whiteChordSlugs.length + index + 1,
+    level: whiteChordSlugs.length + index,
     phase: "black-keys" as const,
     chordSlugs: [...whiteChordSlugs, ...blackChordSlugs.slice(0, index + 1)],
     ...levelDefaults,
   })),
+  {
+    level: 14,
+    phase: "maintenance" as const,
+    chordSlugs: [...whiteChordSlugs, ...blackChordSlugs],
+    ...levelDefaults,
+  },
   {
     level: 15,
     phase: "maintenance" as const,
@@ -45,17 +57,17 @@ export const DEFAULT_PROTOCOL_LEVELS = [
 
 const chordPresentation: Record<
   string,
-  Pick<ProtocolChord, "answerLabel" | "colorName" | "colorHex" | "textClass" | "phase">
+  Pick<ProtocolChord, "answerLabel" | "colorName" | "colorHex" | "textClass" | "colorAddKey" | "phase">
 > = {
-  "white-red-ceg": color("Red", "#ef4444", "text-white"),
-  "white-yellow-cfa": color("Yellow", "#facc15", "text-slate-950"),
-  "white-blue-bdg": color("Blue", "#2563eb", "text-white"),
-  "white-black-acf": color("Black", "#111827", "text-white"),
-  "white-green-dgb": color("Green", "#16a34a", "text-white"),
-  "white-orange-egc": color("Orange", "#f97316", "text-white"),
-  "white-purple-fac": color("Purple", "#9333ea", "text-white"),
-  "white-pink-gbd": color("Pink", "#ec4899", "text-white"),
-  "white-brown-gce": color("Brown", "#92400e", "text-white"),
+  "white-red-ceg": color("Red", "#ef4444", "text-white", "red"),
+  "white-yellow-cfa": color("Yellow", "#facc15", "text-slate-950", "yellow"),
+  "white-blue-bdg": color("Blue", "#2563eb", "text-white", "blue"),
+  "white-black-acf": color("Black", "#111827", "text-white", "black"),
+  "white-green-dgb": color("Green", "#16a34a", "text-white", "blue+yellow"),
+  "white-orange-egc": color("Orange", "#f97316", "text-white", "red+yellow"),
+  "white-purple-fac": color("Purple", "#9333ea", "text-white", "blue+red"),
+  "white-pink-gbd": color("Pink", "#ec4899", "text-white", "red+white"),
+  "white-brown-gce": color("Brown", "#92400e", "text-white", "red+yellow+black"),
   "black-csharp-major": toneName("C sharp"),
   "black-dsharp-major": toneName("D sharp"),
   "black-fsharp-major": toneName("F sharp"),
@@ -65,12 +77,13 @@ const chordPresentation: Record<
 
 const pitchNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-function color(answerLabel: string, colorHex: string, textClass: string) {
+function color(answerLabel: string, colorHex: string, textClass: string, colorAddKey: string) {
   return {
     answerLabel,
     colorName: answerLabel,
     colorHex,
     textClass,
+    colorAddKey,
     phase: "white-keys" as const,
   };
 }
@@ -81,6 +94,7 @@ function toneName(answerLabel: string) {
     colorName: "White",
     colorHex: "#f8fafc",
     textClass: "text-slate-950",
+    colorAddKey: "white",
     phase: "black-keys" as const,
   };
 }
@@ -125,19 +139,23 @@ export function calculateAccuracy(results: readonly TrialResult[]): number {
 
 export function calculateProgression(
   currentLevel: number,
+  currentTrainingPhase: TrainingTaskType,
   recentResults: readonly TrialResult[],
 ): ProgressionDecision {
   const protocolLevel = getProtocolLevel(currentLevel);
   const recentAccuracy = calculateAccuracy(recentResults);
   const isFinalLevel = currentLevel >= 15;
-  const promoted =
-    !isFinalLevel &&
+  const mastered =
     recentResults.length >= protocolLevel.trialsPerSession &&
     recentResults.every((result) => result.isCorrect);
+  const promoted = currentTrainingPhase === "chord_identification" && !isFinalLevel && mastered;
+  const phasePromoted = currentTrainingPhase === "chord_identification" && isFinalLevel && mastered;
 
   return {
     nextLevel: promoted ? currentLevel + 1 : currentLevel,
+    nextTrainingPhase: phasePromoted ? "chord_notes" : currentTrainingPhase,
     recentAccuracy,
     promoted,
+    phasePromoted,
   };
 }

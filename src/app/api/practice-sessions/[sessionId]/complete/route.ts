@@ -44,7 +44,9 @@ export async function POST(
         total: result.totalTrials,
         recentAccuracy: result.decision.recentAccuracy,
         nextLevel: result.decision.nextLevel,
+        nextTrainingPhase: result.decision.nextTrainingPhase,
         promoted: result.decision.promoted,
+        phasePromoted: result.decision.phasePromoted,
       },
     });
   } catch (error) {

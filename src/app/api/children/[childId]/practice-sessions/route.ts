@@ -2,6 +2,7 @@ import { getCurrentUser } from "@/lib/session";
 import { getActiveChordsForLevel } from "@/lib/training/protocol";
 import {
   isValidLearnerLevel,
+  isValidChordSelectionAlgorithm,
   startTrainingSession,
 } from "@/lib/training/persistence";
 import { errorResponse, validateChildId } from "../../_utils";
@@ -39,9 +40,20 @@ export async function POST(
     typeof payload === "object" && payload !== null && !Array.isArray(payload)
       ? (payload as Record<string, unknown>).level
       : undefined;
+  const selectionAlgorithm =
+    typeof payload === "object" && payload !== null && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>).selectionAlgorithm
+      : undefined;
 
   if (level !== undefined && !isValidLearnerLevel(level)) {
     return errorResponse("bad_request", "level must be an integer between 2 and 15.", 400);
+  }
+
+  if (
+    selectionAlgorithm !== undefined &&
+    !isValidChordSelectionAlgorithm(selectionAlgorithm)
+  ) {
+    return errorResponse("bad_request", "selectionAlgorithm must be random or adaptive.", 400);
   }
 
   try {
@@ -49,36 +61,53 @@ export async function POST(
       parentUserId: user.id,
       childProfileId: validChildId,
       level,
+      selectionAlgorithm,
     });
     const chords = getActiveChordsForLevel(session.level);
+    const chordsBySlug = new Map(chords.map((chord) => [chord.slug, chord]));
+    const firstTrial = session.trialPlan[0];
     const choices = chords.map((chord) => ({
       id: chord.slug,
       label: chord.answerLabel,
       helper: chord.phase === "white-keys" ? "Color flag" : chord.notes.join(" "),
       colorHex: chord.colorHex,
       textClass: chord.textClass,
+      colorAddKey: chord.colorAddKey,
       colorClass: colorClassForHex(chord.colorHex),
     }));
-    const trials = Array.from({ length: session.totalTrials }, (_, index) => {
-      const chord = chords[index % chords.length];
 
-      return {
-        trialIndex: index,
-        promptChordSlug: chord.slug,
-        prompt: chord.phase === "white-keys" ? "Choose the color flag." : "Choose the chord name.",
-        toneNotes: chord.toneNotes,
-        correctChoiceId: chord.slug,
-      };
-    });
+    if (!firstTrial) {
+      throw new Error("Session is missing its first trial.");
+    }
+
+    const firstChord = chordsBySlug.get(firstTrial.promptChordSlug);
+
+    if (!firstChord) {
+      throw new Error(`Session references unknown chord: ${firstTrial.promptChordSlug}`);
+    }
+
+    const currentTrial = {
+      trialIndex: firstTrial.trialIndex,
+      taskType: firstTrial.taskType,
+      answerMode: firstTrial.answerMode,
+      promptChordSlug: firstChord.slug,
+      prompt: firstChord.phase === "white-keys" ? "Choose the color flag." : "Choose the chord name.",
+      toneNotes: firstChord.toneNotes,
+      isolatedToneNote: firstTrial.isolatedToneNote,
+      correctChoiceId: firstChord.slug,
+    };
 
     return Response.json(
       {
         session: {
           id: session.id,
           level: session.level,
+          trainingPhase: session.trainingPhase,
+          selectionAlgorithm: session.selectionAlgorithm,
           totalTrials: session.totalTrials,
           choices,
-          trials,
+          currentTrial,
+          trials: [currentTrial],
         },
       },
       { status: 201 },
