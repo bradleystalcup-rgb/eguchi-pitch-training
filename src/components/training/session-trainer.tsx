@@ -92,7 +92,7 @@ function exercisesForLevel(level: number): TrainingExercise[] {
 }
 
 function clampLevel(level: number | null | undefined) {
-  return Math.max(2, level ?? 2);
+  return Math.max(1, level ?? 1);
 }
 
 function getIdFromResponse(data: unknown, keys: string[]) {
@@ -747,7 +747,7 @@ export function SessionTrainer({
             onChange={(event) => setDraftLevel(clampLevel(Number(event.target.value)))}
             className="min-h-14 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 text-base font-bold text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100 disabled:opacity-60"
           >
-            {DEFAULT_PROTOCOL_LEVELS.filter((protocolLevel) => protocolLevel.level >= 2).map((protocolLevel) => (
+            {DEFAULT_PROTOCOL_LEVELS.map((protocolLevel) => (
               <option key={protocolLevel.level} value={protocolLevel.level}>
                 Level {protocolLevel.level}
               </option>

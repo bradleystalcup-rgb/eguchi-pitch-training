@@ -65,3 +65,11 @@ Adds storage for non-color-choice answers.
 - Adds `training_trials.selected_notes` for chord-to-notes attempts.
 - Adds `training_trials.selected_tone_note` for single-note extraction attempts.
 - Existing `selected_chord_slug` remains the answer field for color-choice chord identification.
+
+## 0008_allow_level_one.sql
+
+Restores level 1 as a valid learner level so the protocol can start with two active colors.
+
+- Changes `child_profiles.current_level` and `child_training_progress.current_level` defaults from 2 to 1.
+- Replaces the level 2..15 CHECK constraints with level 1..15 constraints.
+- Existing students are not backfilled down; this only allows new or manually adjusted students to use level 1.

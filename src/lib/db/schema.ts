@@ -94,7 +94,7 @@ export const childProfiles = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     displayName: text("display_name").notNull(),
     birthYear: integer("birth_year"),
-    currentLevel: integer("current_level").notNull().default(2),
+    currentLevel: integer("current_level").notNull().default(1),
     showColorAccessibilityKeys: boolean("show_color_accessibility_keys").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -106,8 +106,8 @@ export const childProfiles = pgTable(
       table.displayName,
     ),
     currentLevelRange: check(
-      "child_profiles_current_level_between_2_and_15",
-      sql`${table.currentLevel} BETWEEN 2 AND 15`,
+      "child_profiles_current_level_between_1_and_15",
+      sql`${table.currentLevel} BETWEEN 1 AND 15`,
     ),
   }),
 );
@@ -140,7 +140,7 @@ export const childTrainingProgress = pgTable(
     childProfileId: text("child_profile_id")
       .primaryKey()
       .references(() => childProfiles.id, { onDelete: "cascade" }),
-    currentLevel: integer("current_level").notNull().default(2),
+    currentLevel: integer("current_level").notNull().default(1),
     trainingPhase: text("training_phase")
       .$type<TrainingTaskType>()
       .notNull()
@@ -153,8 +153,8 @@ export const childTrainingProgress = pgTable(
   },
   (table) => ({
     currentLevelRange: check(
-      "child_training_progress_current_level_between_2_and_15",
-      sql`${table.currentLevel} BETWEEN 2 AND 15`,
+      "child_training_progress_current_level_between_1_and_15",
+      sql`${table.currentLevel} BETWEEN 1 AND 15`,
     ),
   }),
 );

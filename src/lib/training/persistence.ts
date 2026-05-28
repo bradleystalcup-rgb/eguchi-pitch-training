@@ -29,7 +29,7 @@ import type {
   TrialResult,
 } from "./types";
 
-export const MIN_LEARNER_LEVEL = 2;
+export const MIN_LEARNER_LEVEL = 1;
 export const MAX_LEARNER_LEVEL = 15;
 
 export type ChildProfileSummary = {

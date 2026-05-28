@@ -5,6 +5,13 @@ import {
   chooseNextTrialFromAttempt,
   chooseRandomChordSlug,
 } from "../../src/lib/training/scheduler";
+import { getActiveChordsForLevel } from "../../src/lib/training/protocol";
+
+test("protocol levels start with two colors and add one per level", () => {
+  assert.equal(getActiveChordsForLevel(1).length, 2);
+  assert.equal(getActiveChordsForLevel(2).length, 3);
+  assert.equal(getActiveChordsForLevel(3).length, 4);
+});
 
 test("random selection avoids the previous chord when possible", () => {
   const selected = chooseRandomChordSlug(["red", "yellow", "blue"], "yellow", {

@@ -46,7 +46,7 @@ export async function POST(
       : undefined;
 
   if (level !== undefined && !isValidLearnerLevel(level)) {
-    return errorResponse("bad_request", "level must be an integer between 2 and 15.", 400);
+    return errorResponse("bad_request", "level must be an integer between 1 and 15.", 400);
   }
 
   if (

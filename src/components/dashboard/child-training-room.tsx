@@ -19,7 +19,7 @@ type ChildData = {
 type ChildResponse = { child?: ChildData };
 
 function clampLevel(level: number | null | undefined) {
-  return Math.max(2, level ?? 2);
+  return Math.max(1, level ?? 1);
 }
 
 export function ChildTrainingRoom({ childId }: { childId: string }) {
