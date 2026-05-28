@@ -139,16 +139,16 @@ const hotkeySets: Record<HotkeyMode, string[]> = {
 
 const chromaticNoteChoices = [
   { value: "C", sharp: "C", flat: "C" },
-  { value: "C#", sharp: "C#", flat: "Db" },
+  { value: "C#", sharp: "C♯", flat: "D♭" },
   { value: "D", sharp: "D", flat: "D" },
-  { value: "D#", sharp: "D#", flat: "Eb" },
+  { value: "D#", sharp: "D♯", flat: "E♭" },
   { value: "E", sharp: "E", flat: "E" },
   { value: "F", sharp: "F", flat: "F" },
-  { value: "F#", sharp: "F#", flat: "Gb" },
+  { value: "F#", sharp: "F♯", flat: "G♭" },
   { value: "G", sharp: "G", flat: "G" },
-  { value: "G#", sharp: "G#", flat: "Ab" },
+  { value: "G#", sharp: "G♯", flat: "A♭" },
   { value: "A", sharp: "A", flat: "A" },
-  { value: "A#", sharp: "A#", flat: "Bb" },
+  { value: "A#", sharp: "A♯", flat: "B♭" },
   { value: "B", sharp: "B", flat: "B" },
 ];
 
