@@ -78,6 +78,17 @@ Tasks:
 - Keep browser-only code out of core training selection and persistence logic.
 - Decide whether mobile clients should use the same Better Auth session model or a separate token flow.
 
+## Sound Engine Options
+
+Tasks:
+
+- Add a practice setting for selecting the sound source.
+- Support the current JS-native browser audio engine.
+- Evaluate sampled instrument playback for more realistic piano tones.
+- Consider a third sound option, such as an external synth/soundfont engine or device-native audio on mobile.
+- Persist the selected sound option per student or per device.
+- Keep response timing independent from sound loading latency.
+
 ## Post-Completion Challenge Mode
 
 Suggested commit:
