@@ -1,5 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ColorAddSymbol } from "./color-add-symbol";
 
 export type ColorChoice = {
   id: string;
@@ -10,13 +11,6 @@ export type ColorChoice = {
   helper?: string;
   colorAddKey?: string;
 };
-
-function formatColorAddKey(key: string) {
-  return key
-    .split("+")
-    .map((part) => part.slice(0, 1).toUpperCase())
-    .join("+");
-}
 
 export function ColorChoiceGrid({
   choices,
@@ -41,7 +35,7 @@ export function ColorChoiceGrid({
         const isSelected = choice.id === selectedId;
         const isCorrect = choice.id === correctId;
         const hotkeyLabel = hotkeyLabels?.[choice.id];
-        const colorAddLabel = showColorAddKeys && choice.colorAddKey ? formatColorAddKey(choice.colorAddKey) : undefined;
+        const colorAddKey = showColorAddKeys ? choice.colorAddKey : undefined;
 
         return (
           <button
@@ -69,9 +63,9 @@ export function ColorChoiceGrid({
                 {choice.helper}
               </span>
             ) : null}
-            {colorAddLabel ? (
-              <span className="mt-3 inline-flex rounded-2xl bg-white/85 px-3 py-2 text-base font-black tracking-normal text-slate-900 ring-2 ring-white/80">
-                {colorAddLabel}
+            {colorAddKey ? (
+              <span className="mt-3 inline-flex rounded-2xl bg-white/85 px-3 py-2 text-slate-900 ring-2 ring-white/80">
+                <ColorAddSymbol colorKey={colorAddKey} />
               </span>
             ) : null}
             {hotkeyLabel ? (
