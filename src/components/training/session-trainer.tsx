@@ -137,6 +137,8 @@ const hotkeySets: Record<HotkeyMode, string[]> = {
   right: ["6", "7", "8", "9", "0", "y", "u", "i", "o", "p", "h", "j", "k", "l", ";"],
 };
 
+const NEXT_ADVANCE_MS = 750;
+
 const chromaticNoteChoices = [
   { value: "C", sharp: "C", flat: "C" },
   { value: "C#", sharp: "C♯", flat: "D♭" },
@@ -242,6 +244,7 @@ export function SessionTrainer({
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [selectedToneNote, setSelectedToneNote] = useState<string>();
   const [answerIsCorrect, setAnswerIsCorrect] = useState<boolean>();
+  const [nextButtonProgressKey, setNextButtonProgressKey] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [sessionId, setSessionId] = useState<string>();
@@ -356,6 +359,7 @@ export function SessionTrainer({
       clearAnswerState();
       setCorrectCount(0);
       setSummary(undefined);
+      void playExercise(nextExercise);
     } catch {
       setError("We could not begin this practice session.");
     } finally {
@@ -457,11 +461,12 @@ export function SessionTrainer({
       const nextIsCorrect = Boolean(data.attempt?.isCorrect);
       setAnswerIsCorrect(nextIsCorrect);
       setPendingNextExercise(nextExercise);
+      setNextButtonProgressKey((value) => value + 1);
 
       if (autoNext) {
         autoNextTimeoutRef.current = window.setTimeout(() => {
           void advanceAfterAnswer(nextIsCorrect, nextExercise);
-        }, 650);
+        }, NEXT_ADVANCE_MS);
       }
     } catch {
       setError("We could not save that answer. You can keep practicing, but this trial may need to be retried.");
@@ -881,6 +886,7 @@ export function SessionTrainer({
                   choices={current.choices}
                   selectedId={selectedId}
                   correctId={answered ? current.correctChoiceId : undefined}
+                  incorrectId={answered && !isCorrect ? selectedId : undefined}
                   disabled={answered || isSubmittingAttempt}
                   hotkeyLabels={hotkeyLabels}
                   showColorAddKeys={showColorKeys}
@@ -888,15 +894,23 @@ export function SessionTrainer({
                 />
               ) : null}
 
-              {!autoNext ? (
+              {answered || !autoNext ? (
                 <Button
                   size="lg"
                   variant="secondary"
                   disabled={!answered || isSubmittingAttempt || isCompleting}
-                  onClick={handleNext}
-                  className="mt-auto w-full sm:w-auto sm:self-center"
+                  aria-disabled={autoNext && answered}
+                  onClick={autoNext ? undefined : handleNext}
+                  className="relative mt-auto w-full overflow-hidden sm:w-auto sm:self-center"
                 >
-                  {index >= total - 1 ? "Finish" : "Next chord"}
+                  {answered ? (
+                    <span
+                      key={nextButtonProgressKey}
+                      className="next-chord-button-progress absolute inset-x-0 top-0 h-1.5 bg-emerald-500/80"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <span className="relative z-10">{index >= total - 1 ? "Finish" : "Next chord"}</span>
                 </Button>
               ) : null}
             </div>

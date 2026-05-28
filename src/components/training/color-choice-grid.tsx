@@ -16,6 +16,7 @@ export function ColorChoiceGrid({
   choices,
   selectedId,
   correctId,
+  incorrectId,
   disabled,
   hotkeyLabels,
   showColorAddKeys,
@@ -24,6 +25,7 @@ export function ColorChoiceGrid({
   choices: ColorChoice[];
   selectedId?: string;
   correctId?: string;
+  incorrectId?: string;
   disabled?: boolean;
   hotkeyLabels?: Record<string, string>;
   showColorAddKeys?: boolean;
@@ -34,6 +36,7 @@ export function ColorChoiceGrid({
       {choices.map((choice) => {
         const isSelected = choice.id === selectedId;
         const isCorrect = choice.id === correctId;
+        const isIncorrect = choice.id === incorrectId;
         const hotkeyLabel = hotkeyLabels?.[choice.id];
         const colorAddKey = showColorAddKeys ? choice.colorAddKey : undefined;
 
@@ -48,6 +51,7 @@ export function ColorChoiceGrid({
               choice.colorClass,
               isSelected ? "scale-[0.98] ring-4 ring-slate-900/15" : "hover:-translate-y-1",
               isCorrect ? "ring-4 ring-emerald-300" : "",
+              isIncorrect ? "border-red-500 ring-4 ring-red-300" : "",
             )}
             style={choice.colorHex ? { backgroundColor: choice.colorHex } : undefined}
             aria-pressed={isSelected}

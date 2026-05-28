@@ -29,3 +29,18 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+@keyframes next-chord-progress {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.next-chord-button-progress {
+  animation: next-chord-progress 750ms linear forwards;
+  transform-origin: left;
+}
