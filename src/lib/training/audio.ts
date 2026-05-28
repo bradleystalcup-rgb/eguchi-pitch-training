@@ -26,6 +26,7 @@ const chordIntervals: Record<ChordQuality, number[]> = {
 
 let toneModulePromise: Promise<ToneModule> | undefined;
 let synth: TonePolySynth | undefined;
+const DEFAULT_RELEASE_MS = 900;
 
 async function loadTone() {
   if (typeof window === "undefined") {
@@ -57,6 +58,13 @@ async function getSynth() {
   return { Tone, synth };
 }
 
+function waitForPlayback(Tone: ToneModule, duration: string) {
+  const durationMs = Tone.Time(duration).toMilliseconds();
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, Math.max(500, durationMs + DEFAULT_RELEASE_MS));
+  });
+}
+
 export async function playChord({
   root,
   quality = "major",
@@ -69,6 +77,7 @@ export async function playChord({
   );
 
   playableSynth.triggerAttackRelease(notes, duration, Tone.now(), velocity);
+  await waitForPlayback(Tone, duration);
 }
 
 export async function playNotesChord({
@@ -78,6 +87,7 @@ export async function playNotesChord({
 }: NoteChordPlaybackOptions) {
   const { Tone, synth: playableSynth } = await getSynth();
   playableSynth.triggerAttackRelease(notes, duration, Tone.now(), velocity);
+  await waitForPlayback(Tone, duration);
 }
 
 export function getChordNotes(root: string, quality: ChordQuality = "major") {

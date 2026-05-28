@@ -290,7 +290,7 @@ export function SessionTrainer({
     try {
       await playNotesChord({ notes: exercise.chord.toneNotes });
     } finally {
-      window.setTimeout(() => setIsPlaying(false), 500);
+      setIsPlaying(false);
     }
   }
 
