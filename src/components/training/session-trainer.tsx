@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Menu, Music, Pause, Play, Save, Sparkles, Volume2, X } from "lucide-react";
-import { playNotesChord } from "@/lib/training/audio";
+import { playNotesChord, setDefaultSoundEngine, type SoundEngineKind } from "@/lib/training/audio";
 import { DEFAULT_PROTOCOL_LEVELS, DEFAULT_PROTOCOL_VERSION, getActiveChordsForLevel } from "@/lib/training/protocol";
 import type { AnswerMode, ChordSelectionAlgorithm, TrainingTaskType } from "@/lib/training/types";
 import { Alert } from "@/components/ui/alert";
@@ -16,6 +16,12 @@ import { SessionSummary } from "./session-summary";
 
 type HotkeyMode = "left" | "right";
 type AccidentalMode = "sharps" | "flats";
+
+const soundEngineOptions: { value: SoundEngineKind; label: string }[] = [
+  { value: "tone", label: "Tone.js" },
+  { value: "native-synth", label: "Native synth" },
+  { value: "sampled", label: "Sampled piano" },
+];
 
 export type TrainingExercise = {
   id: string;
@@ -260,6 +266,7 @@ export function SessionTrainer({
   const [hotkeyMode, setHotkeyMode] = useState<HotkeyMode>("left");
   const [accidentalMode, setAccidentalMode] = useState<AccidentalMode>("sharps");
   const [selectionAlgorithm, setSelectionAlgorithm] = useState<ChordSelectionAlgorithm>("random");
+  const [soundEngine, setSoundEngine] = useState<SoundEngineKind>("tone");
   const [showColorKeys, setShowColorKeys] = useState(showColorAccessibilityKeys);
   const [isSavingColorKeys, setIsSavingColorKeys] = useState(false);
   const [error, setError] = useState<string>();
@@ -282,6 +289,10 @@ export function SessionTrainer({
 
     return Object.fromEntries((current?.choices ?? []).map((choice, choiceIndex) => [choice.id, keys[choiceIndex] ?? ""]));
   }, [current, hotkeyMode]);
+
+  useEffect(() => {
+    setDefaultSoundEngine(soundEngine);
+  }, [soundEngine]);
 
   async function playExercise(exercise = current) {
     if (!exercise) return;
@@ -816,6 +827,28 @@ export function SessionTrainer({
               Flats
             </Button>
           </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label htmlFor="sound-engine">Sound</Label>
+          <select
+            id="sound-engine"
+            value={soundEngine}
+            onChange={(event) => {
+              const nextSoundEngine = event.target.value as SoundEngineKind;
+              if (nextSoundEngine !== soundEngine) {
+                setSoundEngine(nextSoundEngine);
+                showSettingsToast();
+              }
+            }}
+            className="min-h-14 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 text-base font-bold text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
+          >
+            {soundEngineOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-3">
