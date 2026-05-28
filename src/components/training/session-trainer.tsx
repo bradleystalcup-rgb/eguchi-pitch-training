@@ -15,16 +15,20 @@ import { ColorChoiceGrid, type ColorChoice } from "./color-choice-grid";
 import { SessionSummary } from "./session-summary";
 
 type HotkeyMode = "left" | "right";
+type AccidentalMode = "sharps" | "flats";
 
 export type TrainingExercise = {
   id: string;
   prompt: string;
+  taskType: TrainingTaskType;
+  answerMode: AnswerMode;
   chord: {
     slug: string;
     toneNotes: string[];
   };
   choices: ColorChoice[];
   correctChoiceId: string;
+  isolatedToneNote?: string;
 };
 
 type PracticeSessionResponse = {
@@ -40,6 +44,9 @@ type PracticeSessionResponse = {
 };
 
 type PracticeAttemptResponse = {
+  attempt?: {
+    isCorrect?: boolean;
+  };
   nextTrial?: PracticeTrialResponse | null;
 };
 
@@ -78,6 +85,8 @@ function exercisesForLevel(level: number): TrainingExercise[] {
       chord,
       choices,
       correctChoiceId: chord.slug,
+      taskType: "chord_identification",
+      answerMode: "color_choice",
     };
   });
 }
@@ -111,12 +120,15 @@ function exerciseFromTrial(trial: PracticeTrialResponse, choices: ColorChoice[])
   return {
     id: `${trial.promptChordSlug}-${trial.trialIndex}`,
     prompt: trial.prompt,
+    taskType: trial.taskType ?? "chord_identification",
+    answerMode: trial.answerMode ?? "color_choice",
     chord: {
       slug: trial.promptChordSlug,
       toneNotes: trial.toneNotes,
     },
     choices,
     correctChoiceId: trial.correctChoiceId,
+    isolatedToneNote: trial.isolatedToneNote,
   };
 }
 
@@ -124,6 +136,80 @@ const hotkeySets: Record<HotkeyMode, string[]> = {
   left: ["1", "2", "3", "4", "5", "q", "w", "e", "r", "t", "a", "s", "d", "f", "g"],
   right: ["6", "7", "8", "9", "0", "y", "u", "i", "o", "p", "h", "j", "k", "l", ";"],
 };
+
+const chromaticNoteChoices = [
+  { value: "C", sharp: "C", flat: "C" },
+  { value: "C#", sharp: "C#", flat: "Db" },
+  { value: "D", sharp: "D", flat: "D" },
+  { value: "D#", sharp: "D#", flat: "Eb" },
+  { value: "E", sharp: "E", flat: "E" },
+  { value: "F", sharp: "F", flat: "F" },
+  { value: "F#", sharp: "F#", flat: "Gb" },
+  { value: "G", sharp: "G", flat: "G" },
+  { value: "G#", sharp: "G#", flat: "Ab" },
+  { value: "A", sharp: "A", flat: "A" },
+  { value: "A#", sharp: "A#", flat: "Bb" },
+  { value: "B", sharp: "B", flat: "B" },
+];
+
+function noteLabel(note: (typeof chromaticNoteChoices)[number], accidentalMode: AccidentalMode) {
+  return accidentalMode === "flats" ? note.flat : note.sharp;
+}
+
+function toneNoteForChoice(choice: string, isolatedToneNote?: string) {
+  const octave = isolatedToneNote?.match(/\d+$/)?.[0] ?? "";
+  return `${choice}${octave}`;
+}
+
+function pitchFromToneNote(toneNote?: string) {
+  return toneNote?.replace(/-?\d+$/, "");
+}
+
+function NoteChoiceGrid({
+  selectedNotes,
+  disabled,
+  accidentalMode,
+  hotkeyLabels,
+  onToggle,
+}: {
+  selectedNotes: string[];
+  disabled?: boolean;
+  accidentalMode: AccidentalMode;
+  hotkeyLabels?: Record<string, string>;
+  onToggle: (note: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+      {chromaticNoteChoices.map((note) => {
+        const isSelected = selectedNotes.includes(note.value);
+        const label = noteLabel(note, accidentalMode);
+
+        return (
+          <button
+            key={note.value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={isSelected}
+            onClick={() => onToggle(note.value)}
+            className={[
+              "relative min-h-24 rounded-3xl border-4 p-3 pb-8 text-center text-2xl font-black shadow-md transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:cursor-not-allowed sm:min-h-28",
+              isSelected
+                ? "border-emerald-200 bg-emerald-100 text-emerald-900 ring-4 ring-emerald-200"
+                : "border-white bg-white/75 text-slate-800 hover:-translate-y-1",
+            ].join(" ")}
+          >
+            {label}
+            {hotkeyLabels?.[note.value] ? (
+              <span className="absolute bottom-3 right-3 rounded-full bg-white/75 px-2.5 py-1 text-xs font-black uppercase text-slate-600 ring-1 ring-white">
+                {hotkeyLabels[note.value]}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function SessionTrainer({
   childId,
@@ -153,6 +239,9 @@ export function SessionTrainer({
   const sessionExercises = activeExercises ?? previewExercises;
   const [index, setIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string>();
+  const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
+  const [selectedToneNote, setSelectedToneNote] = useState<string>();
+  const [answerIsCorrect, setAnswerIsCorrect] = useState<boolean>();
   const [correctCount, setCorrectCount] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [sessionId, setSessionId] = useState<string>();
@@ -168,6 +257,7 @@ export function SessionTrainer({
   const [isSavingLevel, setIsSavingLevel] = useState(false);
   const [autoNext, setAutoNext] = useState(false);
   const [hotkeyMode, setHotkeyMode] = useState<HotkeyMode>("left");
+  const [accidentalMode, setAccidentalMode] = useState<AccidentalMode>("sharps");
   const [selectionAlgorithm, setSelectionAlgorithm] = useState<ChordSelectionAlgorithm>("random");
   const [showColorKeys, setShowColorKeys] = useState(showColorAccessibilityKeys);
   const [isSavingColorKeys, setIsSavingColorKeys] = useState(false);
@@ -179,13 +269,16 @@ export function SessionTrainer({
 
   const current = sessionExercises[index];
   const total = sessionId ? sessionTotalTrials : sessionExercises.length;
-  const isCorrect = selectedId === current?.correctChoiceId;
-  const answered = Boolean(selectedId);
+  const isCorrect = Boolean(answerIsCorrect);
+  const answered = answerIsCorrect !== undefined;
   const progress = useMemo(() => (total ? Math.round(((index + Number(answered)) / total) * 100) : 0), [answered, index, total]);
   const hotkeyLabels = useMemo(() => {
     const keys = hotkeySets[hotkeyMode];
-    const currentChoices = current?.choices ?? [];
-    return Object.fromEntries(currentChoices.map((choice, choiceIndex) => [choice.id, keys[choiceIndex] ?? ""]));
+    if (current?.answerMode === "note_set" || current?.answerMode === "single_note") {
+      return Object.fromEntries(chromaticNoteChoices.map((choice, choiceIndex) => [choice.value, keys[choiceIndex] ?? ""]));
+    }
+
+    return Object.fromEntries((current?.choices ?? []).map((choice, choiceIndex) => [choice.id, keys[choiceIndex] ?? ""]));
   }, [current, hotkeyMode]);
 
   useEffect(() => {
@@ -209,6 +302,13 @@ export function SessionTrainer({
 
   async function handlePlay() {
     await playExercise();
+  }
+
+  function clearAnswerState() {
+    setSelectedId(undefined);
+    setSelectedNotes([]);
+    setSelectedToneNote(undefined);
+    setAnswerIsCorrect(undefined);
   }
 
   async function handleBegin() {
@@ -253,7 +353,7 @@ export function SessionTrainer({
       setPauseStartedAt(undefined);
       setIsPaused(false);
       setIndex(0);
-      setSelectedId(undefined);
+      clearAnswerState();
       setCorrectCount(0);
       setSummary(undefined);
     } catch {
@@ -310,7 +410,7 @@ export function SessionTrainer({
     }
 
     setCorrectCount(nextCorrectCount);
-    setSelectedId(undefined);
+    clearAnswerState();
     setPendingNextExercise(undefined);
     setActiveExercises((currentExercises) => {
       if (!currentExercises || currentExercises[nextIndex]) return currentExercises;
@@ -324,14 +424,12 @@ export function SessionTrainer({
     }
   }
 
-  async function handleSelect(choice: ColorChoice) {
-    if (!current || selectedId || !sessionId || isPaused || isSubmittingAttempt) return;
+  async function submitAttempt(answer: { selectedChordSlug?: string; selectedNotes?: string[]; selectedToneNote?: string }) {
+    if (!current || answered || !sessionId || isPaused || isSubmittingAttempt) return;
 
     const answeredAt = readTimerMs();
     const responseMs = Math.max(0, Math.round(answeredAt - (trialStartedAt ?? answeredAt)));
-    const nextIsCorrect = choice.id === current.correctChoiceId;
 
-    setSelectedId(choice.id);
     setError(undefined);
     setIsSubmittingAttempt(true);
 
@@ -343,9 +441,9 @@ export function SessionTrainer({
         body: JSON.stringify({
           trialIndex: index,
           chordSlug: current.chord.slug,
-          selectedChoiceId: choice.id,
-          correctChoiceId: current.correctChoiceId,
-          isCorrect: nextIsCorrect,
+          selectedChordSlug: answer.selectedChordSlug,
+          selectedNotes: answer.selectedNotes,
+          selectedToneNote: answer.selectedToneNote,
           responseMs,
         }),
       });
@@ -356,6 +454,8 @@ export function SessionTrainer({
 
       const data = (await response.json()) as PracticeAttemptResponse;
       nextExercise = data.nextTrial ? exerciseFromTrial(data.nextTrial, current.choices) : null;
+      const nextIsCorrect = Boolean(data.attempt?.isCorrect);
+      setAnswerIsCorrect(nextIsCorrect);
       setPendingNextExercise(nextExercise);
 
       if (autoNext) {
@@ -368,6 +468,32 @@ export function SessionTrainer({
     } finally {
       setIsSubmittingAttempt(false);
     }
+  }
+
+  async function handleSelect(choice: ColorChoice) {
+    setSelectedId(choice.id);
+    await submitAttempt({ selectedChordSlug: choice.id });
+  }
+
+  async function handleNoteSetSubmit() {
+    if (!selectedNotes.length) return;
+    await submitAttempt({ selectedNotes });
+  }
+
+  async function handleToneNoteSelect(note: string) {
+    const toneNote = toneNoteForChoice(note, current?.isolatedToneNote);
+    setSelectedToneNote(toneNote);
+    await submitAttempt({ selectedToneNote: toneNote });
+  }
+
+  function toggleSelectedNote(note: string) {
+    if (answered || isSubmittingAttempt) return;
+
+    setSelectedNotes((notes) => {
+      if (notes.includes(note)) return notes.filter((selectedNote) => selectedNote !== note);
+      if (notes.length >= 5) return notes;
+      return [...notes, note];
+    });
   }
 
   useEffect(() => {
@@ -402,7 +528,7 @@ export function SessionTrainer({
     setSessionTotalTrials(previewExercises.length);
     setPendingNextExercise(undefined);
     setIndex(0);
-    setSelectedId(undefined);
+    clearAnswerState();
     setCorrectCount(0);
     setError(undefined);
     setSummary(undefined);
@@ -497,8 +623,24 @@ export function SessionTrainer({
 
       const key = event.key.toLowerCase();
       const choiceIndex = hotkeySets[hotkeyMode].indexOf(key);
-      const choice = current.choices[choiceIndex];
 
+      if (current.answerMode === "note_set") {
+        const note = chromaticNoteChoices[choiceIndex]?.value;
+        if (!note) return;
+        event.preventDefault();
+        toggleSelectedNote(note);
+        return;
+      }
+
+      if (current.answerMode === "single_note") {
+        const note = chromaticNoteChoices[choiceIndex]?.value;
+        if (!note) return;
+        event.preventDefault();
+        void handleToneNoteSelect(note);
+        return;
+      }
+
+      const choice = current.choices[choiceIndex];
       if (!choice) return;
 
       event.preventDefault();
@@ -507,7 +649,7 @@ export function SessionTrainer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [answered, current, hotkeyMode, isPaused, isSubmittingAttempt, sessionId]);
+  });
 
   if (!current) {
     return (
@@ -606,6 +748,18 @@ export function SessionTrainer({
         </div>
 
         <div className="space-y-3">
+          <Label>Note names</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant={accidentalMode === "sharps" ? "secondary" : "ghost"} onClick={() => setAccidentalMode("sharps")}>
+              Sharps
+            </Button>
+            <Button variant={accidentalMode === "flats" ? "secondary" : "ghost"} onClick={() => setAccidentalMode("flats")}>
+              Flats
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
           <Label htmlFor="practice-level">Level</Label>
           <select
             id="practice-level"
@@ -690,15 +844,49 @@ export function SessionTrainer({
                 {answered && !isCorrect ? "Good try. Listen again." : null}
               </div>
 
-              <ColorChoiceGrid
-                choices={current.choices}
-                selectedId={selectedId}
-                correctId={answered ? current.correctChoiceId : undefined}
-                disabled={answered || isSubmittingAttempt}
-                hotkeyLabels={hotkeyLabels}
-                showColorAddKeys={showColorKeys}
-                onSelect={handleSelect}
-              />
+              {current.answerMode === "note_set" ? (
+                <div className="space-y-4">
+                  <NoteChoiceGrid
+                    selectedNotes={selectedNotes}
+                    disabled={answered || isSubmittingAttempt}
+                    accidentalMode={accidentalMode}
+                    hotkeyLabels={hotkeyLabels}
+                    onToggle={toggleSelectedNote}
+                  />
+                  {!answered ? (
+                    <Button
+                      size="lg"
+                      disabled={!selectedNotes.length || isSubmittingAttempt}
+                      onClick={handleNoteSetSubmit}
+                      className="w-full sm:w-auto sm:self-center"
+                    >
+                      Check notes
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {current.answerMode === "single_note" ? (
+                <NoteChoiceGrid
+                  selectedNotes={selectedToneNote ? [pitchFromToneNote(selectedToneNote) ?? ""] : []}
+                  disabled={answered || isSubmittingAttempt}
+                  accidentalMode={accidentalMode}
+                  hotkeyLabels={hotkeyLabels}
+                  onToggle={handleToneNoteSelect}
+                />
+              ) : null}
+
+              {current.answerMode === "color_choice" ? (
+                <ColorChoiceGrid
+                  choices={current.choices}
+                  selectedId={selectedId}
+                  correctId={answered ? current.correctChoiceId : undefined}
+                  disabled={answered || isSubmittingAttempt}
+                  hotkeyLabels={hotkeyLabels}
+                  showColorAddKeys={showColorKeys}
+                  onSelect={handleSelect}
+                />
+              ) : null}
 
               {!autoNext ? (
                 <Button

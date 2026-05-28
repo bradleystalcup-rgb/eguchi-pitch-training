@@ -72,12 +72,21 @@ function isolatedToneNoteForTask(input: {
 }
 
 function normalizeNoteName(note: string) {
-  return note.trim().replace("♯", "#").toUpperCase();
+  const normalized = note.trim().replace("♯", "#").replace("♭", "B").toUpperCase();
+  const flatMap: Record<string, string> = {
+    DB: "C#",
+    EB: "D#",
+    GB: "F#",
+    AB: "G#",
+    BB: "A#",
+  };
+
+  return flatMap[normalized] ?? normalized;
 }
 
 function normalizeToneNote(note: string) {
-  const normalized = note.trim().replace("♯", "#").toUpperCase();
-  return normalized.replace(/^([A-G]#?)(-?\d+)$/, (_, pitch: string, octave: string) => `${pitch}${octave}`);
+  const normalized = note.trim().replace("♯", "#").replace("♭", "B").toUpperCase();
+  return normalized.replace(/^([A-G](?:#|B)?)(-?\d+)$/, (_, pitch: string, octave: string) => `${normalizeNoteName(pitch)}${octave}`);
 }
 
 function noteSetsMatch(selectedNotes: readonly string[], expectedNotes: readonly string[]) {
