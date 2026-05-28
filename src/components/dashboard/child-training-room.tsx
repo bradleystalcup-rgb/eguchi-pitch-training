@@ -12,6 +12,7 @@ type ChildData = {
   displayName?: string;
   level?: number | null;
   currentLevel?: number | null;
+  showColorAccessibilityKeys?: boolean | null;
   progress?: { currentLevel?: number | null } | null;
 };
 
@@ -22,7 +23,11 @@ function clampLevel(level: number | null | undefined) {
 }
 
 export function ChildTrainingRoom({ childId }: { childId: string }) {
-  const [child, setChild] = useState<{ name: string; level?: number | null }>();
+  const [child, setChild] = useState<{
+    name: string;
+    level?: number | null;
+    showColorAccessibilityKeys: boolean;
+  }>();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>();
 
@@ -41,6 +46,7 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
             ? {
                 name: nextChild.name ?? nextChild.displayName ?? "Learner",
                 level: clampLevel(nextChild.level ?? nextChild.currentLevel ?? nextChild.progress?.currentLevel),
+                showColorAccessibilityKeys: Boolean(nextChild.showColorAccessibilityKeys),
               }
             : undefined,
         );
@@ -71,5 +77,12 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
     );
   }
 
-  return <SessionTrainer childId={childId} childName={child.name} level={clampLevel(child.level)} />;
+  return (
+    <SessionTrainer
+      childId={childId}
+      childName={child.name}
+      level={clampLevel(child.level)}
+      showColorAccessibilityKeys={child.showColorAccessibilityKeys}
+    />
+  );
 }

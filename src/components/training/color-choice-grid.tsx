@@ -8,19 +8,31 @@ export type ColorChoice = {
   colorHex?: string;
   textClass?: string;
   helper?: string;
+  colorAddKey?: string;
 };
+
+function formatColorAddKey(key: string) {
+  return key
+    .split("+")
+    .map((part) => part.slice(0, 1).toUpperCase())
+    .join("+");
+}
 
 export function ColorChoiceGrid({
   choices,
   selectedId,
   correctId,
   disabled,
+  hotkeyLabels,
+  showColorAddKeys,
   onSelect,
 }: {
   choices: ColorChoice[];
   selectedId?: string;
   correctId?: string;
   disabled?: boolean;
+  hotkeyLabels?: Record<string, string>;
+  showColorAddKeys?: boolean;
   onSelect?: (choice: ColorChoice) => void;
 }) {
   return (
@@ -28,6 +40,8 @@ export function ColorChoiceGrid({
       {choices.map((choice) => {
         const isSelected = choice.id === selectedId;
         const isCorrect = choice.id === correctId;
+        const hotkeyLabel = hotkeyLabels?.[choice.id];
+        const colorAddLabel = showColorAddKeys && choice.colorAddKey ? formatColorAddKey(choice.colorAddKey) : undefined;
 
         return (
           <button
@@ -36,7 +50,7 @@ export function ColorChoiceGrid({
             disabled={disabled}
             onClick={() => onSelect?.(choice)}
             className={cn(
-              "group min-h-28 rounded-3xl border-4 border-white p-3 text-left shadow-md transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:cursor-not-allowed",
+              "group relative min-h-28 rounded-3xl border-4 border-white p-3 pb-9 text-left shadow-md transition focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:cursor-not-allowed sm:min-h-32",
               choice.colorClass,
               isSelected ? "scale-[0.98] ring-4 ring-slate-900/15" : "hover:-translate-y-1",
               isCorrect ? "ring-4 ring-emerald-300" : "",
@@ -53,6 +67,16 @@ export function ColorChoiceGrid({
             {choice.helper ? (
               <span className="mt-3 block rounded-2xl bg-white/75 px-3 py-2 text-sm font-black text-slate-700">
                 {choice.helper}
+              </span>
+            ) : null}
+            {colorAddLabel ? (
+              <span className="mt-3 inline-flex rounded-2xl bg-white/85 px-3 py-2 text-base font-black tracking-normal text-slate-900 ring-2 ring-white/80">
+                {colorAddLabel}
+              </span>
+            ) : null}
+            {hotkeyLabel ? (
+              <span className="absolute bottom-3 right-3 rounded-full bg-white/70 px-2.5 py-1 text-xs font-black uppercase text-slate-600 ring-1 ring-white/80">
+                {hotkeyLabel}
               </span>
             ) : null}
           </button>

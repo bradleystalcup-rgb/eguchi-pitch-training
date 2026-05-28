@@ -1,25 +1,56 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Menu, Music, RotateCcw, Save, Sparkles, Volume2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Menu, Music, Pause, Play, Save, Sparkles, Volume2, X } from "lucide-react";
 import { playNotesChord } from "@/lib/training/audio";
 import { DEFAULT_PROTOCOL_LEVELS, DEFAULT_PROTOCOL_VERSION, getActiveChordsForLevel } from "@/lib/training/protocol";
-import type { ProtocolChord } from "@/lib/training/types";
+import type { AnswerMode, ChordSelectionAlgorithm, TrainingTaskType } from "@/lib/training/types";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ColorChoiceGrid, type ColorChoice } from "./color-choice-grid";
 import { SessionSummary } from "./session-summary";
 
+type HotkeyMode = "left" | "right";
+
 export type TrainingExercise = {
   id: string;
   prompt: string;
-  chord: ProtocolChord;
+  chord: {
+    slug: string;
+    toneNotes: string[];
+  };
   choices: ColorChoice[];
+  correctChoiceId: string;
+};
+
+type PracticeSessionResponse = {
+  session?: {
+    id?: string;
+  totalTrials?: number;
+  selectionAlgorithm?: ChordSelectionAlgorithm;
+  trainingPhase?: TrainingTaskType;
+  choices?: ColorChoice[];
+    currentTrial?: PracticeTrialResponse;
+    trials?: PracticeTrialResponse[];
+  };
+};
+
+type PracticeAttemptResponse = {
+  nextTrial?: PracticeTrialResponse | null;
+};
+
+type PracticeTrialResponse = {
+  trialIndex: number;
+  taskType?: TrainingTaskType;
+  answerMode?: AnswerMode;
+  promptChordSlug: string;
+  prompt: string;
+  toneNotes: string[];
+  isolatedToneNote?: string;
   correctChoiceId: string;
 };
 
@@ -35,6 +66,7 @@ function exercisesForLevel(level: number): TrainingExercise[] {
     helper: chord.phase === "white-keys" ? "Color flag" : chord.notes.join(" "),
     colorHex: chord.colorHex,
     textClass: chord.textClass,
+    colorAddKey: chord.colorAddKey,
     colorClass: colorClassForHex(chord.colorHex),
   }));
 
@@ -75,26 +107,50 @@ function readTimerMs() {
   return performance.now();
 }
 
+function exerciseFromTrial(trial: PracticeTrialResponse, choices: ColorChoice[]): TrainingExercise {
+  return {
+    id: `${trial.promptChordSlug}-${trial.trialIndex}`,
+    prompt: trial.prompt,
+    chord: {
+      slug: trial.promptChordSlug,
+      toneNotes: trial.toneNotes,
+    },
+    choices,
+    correctChoiceId: trial.correctChoiceId,
+  };
+}
+
+const hotkeySets: Record<HotkeyMode, string[]> = {
+  left: ["1", "2", "3", "4", "5", "q", "w", "e", "r", "t", "a", "s", "d", "f", "g"],
+  right: ["6", "7", "8", "9", "0", "y", "u", "i", "o", "p", "h", "j", "k", "l", ";"],
+};
+
 export function SessionTrainer({
   childId,
   childName = "Mika",
   level = 2,
+  showColorAccessibilityKeys = false,
   exercises,
   onComplete,
 }: {
   childId: string;
   childName?: string;
   level?: number;
+  showColorAccessibilityKeys?: boolean;
   exercises?: TrainingExercise[];
   onComplete?: (summary: { correct: number; total: number }) => void;
 }) {
   const initialLevel = clampLevel(level);
   const [practiceLevel, setPracticeLevel] = useState(initialLevel);
   const [draftLevel, setDraftLevel] = useState(initialLevel);
-  const sessionExercises = useMemo(
+  const previewExercises = useMemo(
     () => exercises ?? exercisesForLevel(practiceLevel),
     [exercises, practiceLevel],
   );
+  const [activeExercises, setActiveExercises] = useState<TrainingExercise[]>();
+  const [sessionTotalTrials, setSessionTotalTrials] = useState(previewExercises.length);
+  const [pendingNextExercise, setPendingNextExercise] = useState<TrainingExercise | null>();
+  const sessionExercises = activeExercises ?? previewExercises;
   const [index, setIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string>();
   const [correctCount, setCorrectCount] = useState(0);
@@ -102,30 +158,57 @@ export function SessionTrainer({
   const [sessionId, setSessionId] = useState<string>();
   const [sessionStartedAt, setSessionStartedAt] = useState<number>();
   const [trialStartedAt, setTrialStartedAt] = useState<number>();
+  const [pausedDurationMs, setPausedDurationMs] = useState(0);
+  const [pauseStartedAt, setPauseStartedAt] = useState<number>();
+  const [isPaused, setIsPaused] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isSubmittingAttempt, setIsSubmittingAttempt] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSavingLevel, setIsSavingLevel] = useState(false);
+  const [autoNext, setAutoNext] = useState(false);
+  const [hotkeyMode, setHotkeyMode] = useState<HotkeyMode>("left");
+  const [selectionAlgorithm, setSelectionAlgorithm] = useState<ChordSelectionAlgorithm>("random");
+  const [showColorKeys, setShowColorKeys] = useState(showColorAccessibilityKeys);
+  const [isSavingColorKeys, setIsSavingColorKeys] = useState(false);
   const [error, setError] = useState<string>();
   const [levelMessage, setLevelMessage] = useState<string>();
   const [summary, setSummary] = useState<{ correct: number; total: number; minutes: number }>();
+  const autoNextTimeoutRef = useRef<number | undefined>(undefined);
+  const selectChoiceRef = useRef<(choice: ColorChoice) => void>(() => undefined);
 
   const current = sessionExercises[index];
-  const total = sessionExercises.length;
+  const total = sessionId ? sessionTotalTrials : sessionExercises.length;
   const isCorrect = selectedId === current?.correctChoiceId;
   const answered = Boolean(selectedId);
-  const progress = useMemo(() => Math.round(((index + Number(answered)) / total) * 100), [answered, index, total]);
+  const progress = useMemo(() => (total ? Math.round(((index + Number(answered)) / total) * 100) : 0), [answered, index, total]);
+  const hotkeyLabels = useMemo(() => {
+    const keys = hotkeySets[hotkeyMode];
+    const currentChoices = current?.choices ?? [];
+    return Object.fromEntries(currentChoices.map((choice, choiceIndex) => [choice.id, keys[choiceIndex] ?? ""]));
+  }, [current, hotkeyMode]);
 
-  async function handlePlay() {
-    if (!current) return;
+  useEffect(() => {
+    return () => {
+      if (autoNextTimeoutRef.current) {
+        window.clearTimeout(autoNextTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  async function playExercise(exercise = current) {
+    if (!exercise) return;
 
     setIsPlaying(true);
     try {
-      await playNotesChord({ notes: current.chord.toneNotes });
+      await playNotesChord({ notes: exercise.chord.toneNotes });
     } finally {
       window.setTimeout(() => setIsPlaying(false), 500);
     }
+  }
+
+  async function handlePlay() {
+    await playExercise();
   }
 
   async function handleBegin() {
@@ -138,6 +221,7 @@ export function SessionTrainer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           level: practiceLevel,
+          selectionAlgorithm,
           protocolVersion: DEFAULT_PROTOCOL_VERSION,
           plannedTrials: sessionExercises.length,
         }),
@@ -147,17 +231,27 @@ export function SessionTrainer({
         throw new Error("Unable to start session");
       }
 
-      const data = (await response.json()) as unknown;
+      const data = (await response.json()) as PracticeSessionResponse;
       const nextSessionId = getIdFromResponse(data, ["id", "sessionId"]);
+      const nextChoices = data.session?.choices;
+      const nextTrial = data.session?.currentTrial ?? data.session?.trials?.[0];
+      const nextTotalTrials = data.session?.totalTrials;
 
-      if (!nextSessionId) {
-        throw new Error("Missing session id");
+      if (!nextSessionId || !nextChoices?.length || !nextTrial || !nextTotalTrials) {
+        throw new Error("Missing session plan");
       }
 
+      const nextExercise = exerciseFromTrial(nextTrial, nextChoices);
       const now = readTimerMs();
       setSessionId(nextSessionId);
+      setActiveExercises([nextExercise]);
+      setSessionTotalTrials(nextTotalTrials);
+      setPendingNextExercise(undefined);
       setSessionStartedAt(now);
       setTrialStartedAt(now);
+      setPausedDurationMs(0);
+      setPauseStartedAt(undefined);
+      setIsPaused(false);
       setIndex(0);
       setSelectedId(undefined);
       setCorrectCount(0);
@@ -169,56 +263,6 @@ export function SessionTrainer({
     }
   }
 
-  async function handleSelect(choice: ColorChoice) {
-    if (!current || selectedId || !sessionId || isSubmittingAttempt) return;
-
-    const answeredAt = readTimerMs();
-    const responseMs = Math.max(0, Math.round(answeredAt - (trialStartedAt ?? answeredAt)));
-    const nextIsCorrect = choice.id === current.correctChoiceId;
-
-    setSelectedId(choice.id);
-    setError(undefined);
-    setIsSubmittingAttempt(true);
-
-    try {
-      const response = await fetch(`/api/practice-sessions/${sessionId}/attempts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          trialIndex: index,
-          chordSlug: current.chord.slug,
-          selectedChoiceId: choice.id,
-          correctChoiceId: current.correctChoiceId,
-          isCorrect: nextIsCorrect,
-          responseMs,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Unable to save attempt");
-      }
-    } catch {
-      setError("We could not save that answer. You can keep practicing, but this trial may need to be retried.");
-    } finally {
-      setIsSubmittingAttempt(false);
-    }
-  }
-
-  async function handleNext() {
-    const nextCorrectCount = correctCount + Number(isCorrect);
-
-    if (index >= total - 1) {
-      await handleComplete(nextCorrectCount);
-      onComplete?.({ correct: nextCorrectCount, total });
-      return;
-    }
-
-    setCorrectCount(nextCorrectCount);
-    setSelectedId(undefined);
-    setIndex((value) => value + 1);
-    setTrialStartedAt(readTimerMs());
-  }
-
   async function handleComplete(nextCorrectCount: number) {
     if (!sessionId) return;
 
@@ -227,7 +271,7 @@ export function SessionTrainer({
 
     try {
       const completedAt = readTimerMs();
-      const durationMs = Math.max(0, Math.round(completedAt - (sessionStartedAt ?? completedAt)));
+      const durationMs = Math.max(0, Math.round(completedAt - (sessionStartedAt ?? completedAt) - pausedDurationMs));
       const response = await fetch(`/api/practice-sessions/${sessionId}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -254,15 +298,140 @@ export function SessionTrainer({
     }
   }
 
+  async function advanceAfterAnswer(answerWasCorrect: boolean, issuedNextExercise = pendingNextExercise) {
+    const nextCorrectCount = correctCount + Number(answerWasCorrect);
+    const nextIndex = index + 1;
+    const nextExercise = issuedNextExercise ?? sessionExercises[nextIndex];
+
+    if (!nextExercise) {
+      await handleComplete(nextCorrectCount);
+      onComplete?.({ correct: nextCorrectCount, total });
+      return;
+    }
+
+    setCorrectCount(nextCorrectCount);
+    setSelectedId(undefined);
+    setPendingNextExercise(undefined);
+    setActiveExercises((currentExercises) => {
+      if (!currentExercises || currentExercises[nextIndex]) return currentExercises;
+      return [...currentExercises, nextExercise];
+    });
+    setIndex(nextIndex);
+    setTrialStartedAt(readTimerMs());
+
+    if (nextExercise && !isPaused) {
+      void playExercise(nextExercise);
+    }
+  }
+
+  async function handleSelect(choice: ColorChoice) {
+    if (!current || selectedId || !sessionId || isPaused || isSubmittingAttempt) return;
+
+    const answeredAt = readTimerMs();
+    const responseMs = Math.max(0, Math.round(answeredAt - (trialStartedAt ?? answeredAt)));
+    const nextIsCorrect = choice.id === current.correctChoiceId;
+
+    setSelectedId(choice.id);
+    setError(undefined);
+    setIsSubmittingAttempt(true);
+
+    try {
+      let nextExercise: TrainingExercise | null = null;
+      const response = await fetch(`/api/practice-sessions/${sessionId}/attempts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          trialIndex: index,
+          chordSlug: current.chord.slug,
+          selectedChoiceId: choice.id,
+          correctChoiceId: current.correctChoiceId,
+          isCorrect: nextIsCorrect,
+          responseMs,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to save attempt");
+      }
+
+      const data = (await response.json()) as PracticeAttemptResponse;
+      nextExercise = data.nextTrial ? exerciseFromTrial(data.nextTrial, current.choices) : null;
+      setPendingNextExercise(nextExercise);
+
+      if (autoNext) {
+        autoNextTimeoutRef.current = window.setTimeout(() => {
+          void advanceAfterAnswer(nextIsCorrect, nextExercise);
+        }, 650);
+      }
+    } catch {
+      setError("We could not save that answer. You can keep practicing, but this trial may need to be retried.");
+    } finally {
+      setIsSubmittingAttempt(false);
+    }
+  }
+
+  useEffect(() => {
+    selectChoiceRef.current = (choice: ColorChoice) => {
+      void handleSelect(choice);
+    };
+  });
+
+  async function handleNext() {
+    if (autoNextTimeoutRef.current) {
+      window.clearTimeout(autoNextTimeoutRef.current);
+      autoNextTimeoutRef.current = undefined;
+    }
+
+    await advanceAfterAnswer(isCorrect);
+  }
+
   function handleReset() {
+    if (autoNextTimeoutRef.current) {
+      window.clearTimeout(autoNextTimeoutRef.current);
+      autoNextTimeoutRef.current = undefined;
+    }
+
     setSessionId(undefined);
     setSessionStartedAt(undefined);
     setTrialStartedAt(undefined);
+    setPausedDurationMs(0);
+    setPauseStartedAt(undefined);
+    setIsPaused(false);
+    setIsSettingsOpen(false);
+    setActiveExercises(undefined);
+    setSessionTotalTrials(previewExercises.length);
+    setPendingNextExercise(undefined);
     setIndex(0);
     setSelectedId(undefined);
     setCorrectCount(0);
     setError(undefined);
     setSummary(undefined);
+  }
+
+  function handlePause() {
+    if (!sessionId || isPaused) return;
+
+    setIsPaused(true);
+    setPauseStartedAt(readTimerMs());
+    setIsSettingsOpen(true);
+
+    if (autoNextTimeoutRef.current) {
+      window.clearTimeout(autoNextTimeoutRef.current);
+      autoNextTimeoutRef.current = undefined;
+    }
+  }
+
+  function handleResume() {
+    if (!isPaused) return;
+
+    const now = readTimerMs();
+    const pausedMs = Math.max(0, now - (pauseStartedAt ?? now));
+
+    setPausedDurationMs((value) => value + pausedMs);
+    setTrialStartedAt((value) => (value ? value + pausedMs : value));
+    setPauseStartedAt(undefined);
+    setIsPaused(false);
+    setIsSettingsOpen(false);
   }
 
   async function handleSaveLevel() {
@@ -295,6 +464,51 @@ export function SessionTrainer({
     }
   }
 
+  async function handleColorKeyToggle(nextValue: boolean) {
+    setShowColorKeys(nextValue);
+    setIsSavingColorKeys(true);
+    setError(undefined);
+
+    try {
+      const response = await fetch(`/api/children/${childId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showColorAccessibilityKeys: nextValue }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to save color key preference");
+      }
+    } catch {
+      setShowColorKeys(!nextValue);
+      setError("We could not save the color key setting.");
+    } finally {
+      setIsSavingColorKeys(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!sessionId || !current || isPaused || answered || isSubmittingAttempt) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+
+      if (target?.closest("input, select, textarea, button")) return;
+
+      const key = event.key.toLowerCase();
+      const choiceIndex = hotkeySets[hotkeyMode].indexOf(key);
+      const choice = current.choices[choiceIndex];
+
+      if (!choice) return;
+
+      event.preventDefault();
+      selectChoiceRef.current(choice);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [answered, current, hotkeyMode, isPaused, isSubmittingAttempt, sessionId]);
+
   if (!current) {
     return (
       <Card className="bg-sky-50">
@@ -321,13 +535,198 @@ export function SessionTrainer({
     );
   }
 
+  const settingsSheet = (
+    <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+      <SheetContent onClose={() => setIsSettingsOpen(false)}>
+        <SheetHeader>
+          <SheetTitle>{isPaused ? "Practice paused" : "Practice settings"}</SheetTitle>
+          <SheetDescription>
+            {sessionId ? "Adjust practice options, then resume when ready." : "Choose the learner level before starting a session."}
+          </SheetDescription>
+        </SheetHeader>
+
+        {isPaused ? (
+          <Button size="lg" onClick={handleResume}>
+            <Play className="size-5" aria-hidden="true" />
+            Resume
+          </Button>
+        ) : null}
+
+        <label className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-slate-100 bg-sky-50 px-4 py-3 text-base font-black text-slate-900">
+          Auto-next
+          <input
+            type="checkbox"
+            checked={autoNext}
+            onChange={(event) => setAutoNext(event.target.checked)}
+            className="size-6 accent-emerald-500"
+          />
+        </label>
+
+        <label className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-slate-100 bg-emerald-50 px-4 py-3 text-base font-black text-slate-900">
+          Color keys
+          <input
+            type="checkbox"
+            checked={showColorKeys}
+            disabled={isSavingColorKeys}
+            onChange={(event) => void handleColorKeyToggle(event.target.checked)}
+            className="size-6 accent-emerald-500"
+          />
+        </label>
+
+        <div className="space-y-3">
+          <Label>Chord order</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant={selectionAlgorithm === "random" ? "secondary" : "ghost"}
+              onClick={() => setSelectionAlgorithm("random")}
+              disabled={Boolean(sessionId)}
+            >
+              Random
+            </Button>
+            <Button
+              variant={selectionAlgorithm === "adaptive" ? "secondary" : "ghost"}
+              onClick={() => setSelectionAlgorithm("adaptive")}
+              disabled={Boolean(sessionId)}
+            >
+              Adaptive
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label>Keyboard side</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant={hotkeyMode === "left" ? "secondary" : "ghost"} onClick={() => setHotkeyMode("left")}>
+              Left hand
+            </Button>
+            <Button variant={hotkeyMode === "right" ? "secondary" : "ghost"} onClick={() => setHotkeyMode("right")}>
+              Right hand
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label htmlFor="practice-level">Level</Label>
+          <select
+            id="practice-level"
+            value={draftLevel}
+            disabled={Boolean(sessionId)}
+            onChange={(event) => setDraftLevel(clampLevel(Number(event.target.value)))}
+            className="min-h-14 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 text-base font-bold text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100 disabled:opacity-60"
+          >
+            {DEFAULT_PROTOCOL_LEVELS.filter((protocolLevel) => protocolLevel.level >= 2).map((protocolLevel) => (
+              <option key={protocolLevel.level} value={protocolLevel.level}>
+                Level {protocolLevel.level}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {!sessionId ? (
+          <Button onClick={handleSaveLevel} disabled={isSavingLevel}>
+            <Save className="size-5" aria-hidden="true" />
+            {isSavingLevel ? "Saving" : "Save level"}
+          </Button>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+
+  if (sessionId) {
+    return (
+      <div
+        className={[
+          "fixed inset-0 z-40 min-h-[100svh] w-screen overflow-y-auto px-4 pb-6 pt-8 transition-colors sm:px-6",
+          isPaused ? "bg-amber-50" : "bg-sky-50",
+        ].join(" ")}
+      >
+        <div className="absolute inset-x-0 top-0 h-3 bg-white/70">
+          <div
+            className="h-full rounded-r-full bg-gradient-to-r from-emerald-300 via-sky-300 to-pink-300 transition-all"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        <div className="mx-auto flex min-h-[calc(100svh-3.5rem)] w-full max-w-5xl flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <Button size="icon" variant="ghost" aria-label={isPaused ? "Resume practice" : "Pause practice"} onClick={isPaused ? handleResume : handlePause}>
+              {isPaused ? <Play className="size-6" aria-hidden="true" /> : <Pause className="size-6" aria-hidden="true" />}
+            </Button>
+            <div className="text-center text-sm font-black text-slate-600">
+              Trial {index + 1} of {total}
+            </div>
+            <Button size="icon" variant="ghost" aria-label="Stop practice session" onClick={handleReset}>
+              <X className="size-8" aria-hidden="true" />
+            </Button>
+          </div>
+
+          {error ? <Alert tone="danger">{error}</Alert> : null}
+
+          {isPaused ? (
+            <div className="grid flex-1 place-items-center rounded-3xl bg-white/45 p-6 text-center ring-2 ring-white/80">
+              <div>
+                <div className="text-4xl font-black text-slate-900 sm:text-5xl">Paused</div>
+                <div className="mt-3 text-base font-bold text-slate-600">Options are open.</div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <Badge tone="pink">Level {practiceLevel}</Badge>
+                <Button size="lg" onClick={handlePlay} disabled={isPlaying}>
+                  <Volume2 className="h-6 w-6" aria-hidden="true" />
+                  {isPlaying ? "Playing" : "Play chord"}
+                </Button>
+              </div>
+
+              <div className="min-h-16 rounded-3xl bg-white/65 p-4 text-lg font-black text-slate-800 ring-2 ring-white">
+                {!answered ? current.prompt : null}
+                {answered && isCorrect ? (
+                  <span className="inline-flex items-center gap-2 text-emerald-700">
+                    <Sparkles className="h-6 w-6" aria-hidden="true" />
+                    Nice listening.
+                  </span>
+                ) : null}
+                {answered && !isCorrect ? "Good try. Listen again." : null}
+              </div>
+
+              <ColorChoiceGrid
+                choices={current.choices}
+                selectedId={selectedId}
+                correctId={answered ? current.correctChoiceId : undefined}
+                disabled={answered || isSubmittingAttempt}
+                hotkeyLabels={hotkeyLabels}
+                showColorAddKeys={showColorKeys}
+                onSelect={handleSelect}
+              />
+
+              {!autoNext ? (
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  disabled={!answered || isSubmittingAttempt || isCompleting}
+                  onClick={handleNext}
+                  className="mt-auto w-full sm:w-auto sm:self-center"
+                >
+                  {index >= total - 1 ? "Finish" : "Next chord"}
+                </Button>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {settingsSheet}
+      </div>
+    );
+  }
+
   return (
     <Card className="bg-gradient-to-br from-sky-50 via-white to-amber-50">
       <CardHeader>
         <div>
           <Badge tone="pink">Level {practiceLevel}</Badge>
           <CardTitle className="mt-3">Practice room</CardTitle>
-          <CardDescription>{sessionId ? current.prompt : `${childName} can begin when the room is quiet.`}</CardDescription>
+          <CardDescription>{`${childName} can begin when the room is quiet.`}</CardDescription>
         </div>
         <Button size="icon" variant="ghost" aria-label="Open practice settings" onClick={() => setIsSettingsOpen(true)}>
           <Menu className="size-5" aria-hidden="true" />
@@ -338,89 +737,21 @@ export function SessionTrainer({
         {error ? <Alert tone="danger">{error}</Alert> : null}
         {levelMessage ? <Alert tone="success">{levelMessage}</Alert> : null}
 
-        {!sessionId ? (
-          <div className="rounded-3xl bg-white/80 p-5 ring-2 ring-white">
-            <div className="mb-4 flex items-center gap-3 text-slate-800">
-              <Music className="size-8 text-pink-500" aria-hidden="true" />
-              <div>
-                <div className="text-lg font-black">Ready for {total} short trials</div>
-                <div className="text-sm font-bold text-slate-500">Only level {practiceLevel} choices will appear.</div>
-              </div>
+        <div className="rounded-3xl bg-white/80 p-5 ring-2 ring-white">
+          <div className="mb-4 flex items-center gap-3 text-slate-800">
+            <Music className="size-8 text-pink-500" aria-hidden="true" />
+            <div>
+              <div className="text-lg font-black">Ready for {total} short trials</div>
+              <div className="text-sm font-bold text-slate-500">Only level {practiceLevel} choices will appear.</div>
             </div>
-            <Button size="lg" onClick={handleBegin} disabled={isStarting}>
-              {isStarting ? "Starting" : "Begin"}
-            </Button>
           </div>
-        ) : (
-          <>
-            <Progress value={progress} label={`Trial ${index + 1} of ${total}`} />
-
-            <div className="flex flex-wrap gap-3">
-              <Button size="lg" onClick={handlePlay} disabled={isPlaying}>
-                <Volume2 className="h-6 w-6" aria-hidden="true" />
-                {isPlaying ? "Playing" : "Play chord"}
-              </Button>
-              <Button variant="ghost" size="lg" onClick={handleReset}>
-                <RotateCcw className="h-6 w-6" aria-hidden="true" />
-                Start over
-              </Button>
-            </div>
-
-            <ColorChoiceGrid
-              choices={current.choices}
-              selectedId={selectedId}
-              correctId={answered ? current.correctChoiceId : undefined}
-              disabled={answered || isSubmittingAttempt}
-              onSelect={handleSelect}
-            />
-
-            <div className="min-h-16 rounded-3xl bg-white/80 p-4 text-lg font-black text-slate-800 ring-2 ring-white">
-              {!answered ? "Tap an available color after you listen." : null}
-              {answered && isCorrect ? (
-                <span className="inline-flex items-center gap-2 text-emerald-700">
-                  <Sparkles className="h-6 w-6" aria-hidden="true" />
-                  Nice listening. That chord feels right.
-                </span>
-              ) : null}
-              {answered && !isCorrect ? "Good try. Listen again and remember the color." : null}
-            </div>
-
-            <Button size="lg" variant="secondary" disabled={!answered || isSubmittingAttempt || isCompleting} onClick={handleNext}>
-              {index >= total - 1 ? "Finish" : "Next chord"}
-            </Button>
-          </>
-        )}
+          <Button size="lg" onClick={handleBegin} disabled={isStarting}>
+            {isStarting ? "Starting" : "Begin"}
+          </Button>
+        </div>
       </div>
 
-      <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-        <SheetContent onClose={() => setIsSettingsOpen(false)}>
-          <SheetHeader>
-            <SheetTitle>Practice settings</SheetTitle>
-            <SheetDescription>Choose the learner level before starting a session.</SheetDescription>
-          </SheetHeader>
-
-          <div className="space-y-3">
-            <Label htmlFor="practice-level">Level</Label>
-            <select
-              id="practice-level"
-              value={draftLevel}
-              onChange={(event) => setDraftLevel(clampLevel(Number(event.target.value)))}
-              className="min-h-14 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 text-base font-bold text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"
-            >
-              {DEFAULT_PROTOCOL_LEVELS.filter((protocolLevel) => protocolLevel.level >= 2).map((protocolLevel) => (
-                <option key={protocolLevel.level} value={protocolLevel.level}>
-                  Level {protocolLevel.level}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <Button onClick={handleSaveLevel} disabled={isSavingLevel}>
-            <Save className="size-5" aria-hidden="true" />
-            {isSavingLevel ? "Saving" : "Save level"}
-          </Button>
-        </SheetContent>
-      </Sheet>
+      {settingsSheet}
     </Card>
   );
 }
