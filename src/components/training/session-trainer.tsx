@@ -137,8 +137,6 @@ const hotkeySets: Record<HotkeyMode, string[]> = {
   right: ["6", "7", "8", "9", "0", "y", "u", "i", "o", "p", "h", "j", "k", "l", ";"],
 };
 
-const NEXT_ADVANCE_MS = 750;
-
 const chromaticNoteChoices = [
   { value: "C", sharp: "C", flat: "C" },
   { value: "C#", sharp: "C♯", flat: "D♭" },
@@ -267,7 +265,6 @@ export function SessionTrainer({
   const [error, setError] = useState<string>();
   const [levelMessage, setLevelMessage] = useState<string>();
   const [summary, setSummary] = useState<{ correct: number; total: number; minutes: number }>();
-  const autoNextTimeoutRef = useRef<number | undefined>(undefined);
   const selectChoiceRef = useRef<(choice: ColorChoice) => void>(() => undefined);
 
   const current = sessionExercises[index];
@@ -283,14 +280,6 @@ export function SessionTrainer({
 
     return Object.fromEntries((current?.choices ?? []).map((choice, choiceIndex) => [choice.id, keys[choiceIndex] ?? ""]));
   }, [current, hotkeyMode]);
-
-  useEffect(() => {
-    return () => {
-      if (autoNextTimeoutRef.current) {
-        window.clearTimeout(autoNextTimeoutRef.current);
-      }
-    };
-  }, []);
 
   async function playExercise(exercise = current) {
     if (!exercise) return;
@@ -462,12 +451,6 @@ export function SessionTrainer({
       setAnswerIsCorrect(nextIsCorrect);
       setPendingNextExercise(nextExercise);
       setNextButtonProgressKey((value) => value + 1);
-
-      if (autoNext) {
-        autoNextTimeoutRef.current = window.setTimeout(() => {
-          void advanceAfterAnswer(nextIsCorrect, nextExercise);
-        }, NEXT_ADVANCE_MS);
-      }
     } catch {
       setError("We could not save that answer. You can keep practicing, but this trial may need to be retried.");
     } finally {
@@ -508,20 +491,16 @@ export function SessionTrainer({
   });
 
   async function handleNext() {
-    if (autoNextTimeoutRef.current) {
-      window.clearTimeout(autoNextTimeoutRef.current);
-      autoNextTimeoutRef.current = undefined;
-    }
-
     await advanceAfterAnswer(isCorrect);
   }
 
-  function handleReset() {
-    if (autoNextTimeoutRef.current) {
-      window.clearTimeout(autoNextTimeoutRef.current);
-      autoNextTimeoutRef.current = undefined;
-    }
+  function handleNextProgressEnd() {
+    if (!autoNext || !answered || isPaused || isSubmittingAttempt || isCompleting) return;
 
+    void advanceAfterAnswer(isCorrect);
+  }
+
+  function handleReset() {
     setSessionId(undefined);
     setSessionStartedAt(undefined);
     setTrialStartedAt(undefined);
@@ -545,11 +524,6 @@ export function SessionTrainer({
     setIsPaused(true);
     setPauseStartedAt(readTimerMs());
     setIsSettingsOpen(true);
-
-    if (autoNextTimeoutRef.current) {
-      window.clearTimeout(autoNextTimeoutRef.current);
-      autoNextTimeoutRef.current = undefined;
-    }
   }
 
   function handleResume() {
@@ -906,8 +880,9 @@ export function SessionTrainer({
                   {answered ? (
                     <span
                       key={nextButtonProgressKey}
-                      className="next-chord-button-progress absolute inset-x-0 top-0 h-1.5 bg-emerald-500/80"
+                      className="next-chord-button-progress absolute inset-x-0 bottom-0 h-2 rounded-b-2xl bg-amber-700/70"
                       aria-hidden="true"
+                      onAnimationEnd={handleNextProgressEnd}
                     />
                   ) : null}
                   <span className="relative z-10">{index >= total - 1 ? "Finish" : "Next chord"}</span>
