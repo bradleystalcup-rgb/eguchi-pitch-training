@@ -55,6 +55,38 @@ const pitchOffsets: Record<string, number> = {
   BB: 10,
   B: 11,
 };
+const sampledPianoAnchors = [
+  { note: "A0", file: "A0v4.mp3" },
+  { note: "C1", file: "C1v4.mp3" },
+  { note: "D#1", file: "Dsharp1v4.mp3" },
+  { note: "F#1", file: "Fsharp1v4.mp3" },
+  { note: "A1", file: "A1v4.mp3" },
+  { note: "C2", file: "C2v4.mp3" },
+  { note: "D#2", file: "Dsharp2v4.mp3" },
+  { note: "F#2", file: "Fsharp2v4.mp3" },
+  { note: "A2", file: "A2v4.mp3" },
+  { note: "C3", file: "C3v4.mp3" },
+  { note: "D#3", file: "Dsharp3v4.mp3" },
+  { note: "F#3", file: "Fsharp3v4.mp3" },
+  { note: "A3", file: "A3v4.mp3" },
+  { note: "C4", file: "C4v4.mp3" },
+  { note: "D#4", file: "Dsharp4v4.mp3" },
+  { note: "F#4", file: "Fsharp4v4.mp3" },
+  { note: "A4", file: "A4v4.mp3" },
+  { note: "C5", file: "C5v4.mp3" },
+  { note: "D#5", file: "Dsharp5v4.mp3" },
+  { note: "F#5", file: "Fsharp5v4.mp3" },
+  { note: "A5", file: "A5v4.mp3" },
+  { note: "C6", file: "C6v4.mp3" },
+  { note: "D#6", file: "Dsharp6v4.mp3" },
+  { note: "F#6", file: "Fsharp6v4.mp3" },
+  { note: "A6", file: "A6v4.mp3" },
+  { note: "C7", file: "C7v4.mp3" },
+  { note: "D#7", file: "Dsharp7v4.mp3" },
+  { note: "F#7", file: "Fsharp7v4.mp3" },
+  { note: "A7", file: "A7v4.mp3" },
+  { note: "C8", file: "C8v4.mp3" },
+].map((sample) => ({ ...sample, midi: noteToMidi(sample.note) ?? 60 }));
 
 let defaultEngineKind: SoundEngineKind = "tone";
 let activeEngine: SoundEngine | undefined;
@@ -105,6 +137,12 @@ function transposeNote(root: string, interval: number) {
 function midiToNote(midi: number) {
   const pitchNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   return `${pitchNames[midi % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+function closestSampleAnchor(midi: number) {
+  return sampledPianoAnchors.reduce((closest, sample) =>
+    Math.abs(sample.midi - midi) < Math.abs(closest.midi - midi) ? sample : closest,
+  );
 }
 
 function notesForChord(root: string, quality: ChordQuality) {
@@ -179,24 +217,23 @@ function createSampledEngine(): SoundEngine {
     return audioContext;
   }
 
-  function sampleUrl(note: string) {
-    return `/audio/piano/${encodeURIComponent(note.replace("#", "sharp"))}.mp3`;
+  function sampleUrl(file: string) {
+    return `/audio/piano-salamander-v4/${file}`;
   }
 
-  async function loadSample(note: string) {
+  async function loadSample(file: string) {
     const context = getAudioContext();
-    const normalized = note.replace("♯", "#");
-    const existing = samplePromises.get(normalized);
+    const existing = samplePromises.get(file);
     if (existing) return existing;
 
-    const nextPromise = fetch(sampleUrl(normalized))
+    const nextPromise = fetch(sampleUrl(file))
       .then((response) => {
-        if (!response.ok) throw new Error(`Missing sample for ${normalized}`);
+        if (!response.ok) throw new Error(`Missing sample ${file}`);
         return response.arrayBuffer();
       })
       .then((buffer) => context.decodeAudioData(buffer));
 
-    samplePromises.set(normalized, nextPromise);
+    samplePromises.set(file, nextPromise);
     return nextPromise;
   }
 
@@ -205,14 +242,24 @@ function createSampledEngine(): SoundEngine {
     await context.resume();
 
     try {
-      const buffers = await Promise.all(options.notes.map(loadSample));
+      const plannedNotes = options.notes.map((note) => {
+        const midi = noteToMidi(note);
+        if (midi === undefined) throw new Error(`Unsupported sampled note ${note}`);
+        const anchor = closestSampleAnchor(midi);
+        return {
+          anchor,
+          playbackRate: 2 ** ((midi - anchor.midi) / 12),
+        };
+      });
+      const buffers = await Promise.all(plannedNotes.map(({ anchor }) => loadSample(anchor.file)));
       const start = context.currentTime;
 
-      for (const buffer of buffers) {
+      for (const [index, buffer] of buffers.entries()) {
         const source = context.createBufferSource();
         const gain = context.createGain();
 
         source.buffer = buffer;
+        source.playbackRate.value = plannedNotes[index].playbackRate;
         gain.gain.value = options.velocity ?? DEFAULT_VELOCITY;
         source.connect(gain);
         gain.connect(context.destination);
