@@ -3,12 +3,47 @@ import { getActiveChordsForLevel } from "@/lib/training/protocol";
 import {
   isValidLearnerLevel,
   isValidChordSelectionAlgorithm,
+  listPracticeSessionHistoryForParent,
   startTrainingSession,
 } from "@/lib/training/persistence";
 import { errorResponse, validateChildId } from "../../_utils";
 
 function colorClassForHex(hex: string) {
   return hex === "#f8fafc" ? "bg-slate-50" : "";
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ childId: string }> },
+) {
+  const user = await getCurrentUser();
+
+  if (!user) {
+    return errorResponse("unauthorized", "Authentication is required.", 401);
+  }
+
+  const { childId } = await params;
+  const validChildId = validateChildId(childId);
+
+  if (!validChildId) {
+    return errorResponse("bad_request", "childId is required.", 400);
+  }
+
+  try {
+    const sessions = await listPracticeSessionHistoryForParent({
+      parentUserId: user.id,
+      childProfileId: validChildId,
+    });
+
+    if (!sessions) {
+      return errorResponse("not_found", "Child profile was not found.", 404);
+    }
+
+    return Response.json({ sessions });
+  } catch (error) {
+    console.error("Failed to list practice sessions", error);
+    return errorResponse("internal_error", "Unable to list practice sessions.", 500);
+  }
 }
 
 export async function POST(

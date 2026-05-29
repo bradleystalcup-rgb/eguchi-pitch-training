@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Menu, Music, Pause, Play, Save, Sparkles, Volume2, X } from "lucide-react";
 import { playNotesChord, setDefaultSoundEngine, type SoundEngineKind } from "@/lib/training/audio";
 import { DEFAULT_PROTOCOL_LEVELS, DEFAULT_PROTOCOL_VERSION, getActiveChordsForLevel } from "@/lib/training/protocol";
@@ -54,6 +54,47 @@ type PracticeAttemptResponse = {
     isCorrect?: boolean;
   };
   nextTrial?: PracticeTrialResponse | null;
+};
+
+type SessionChordStat = {
+  chordSlug: string;
+  label: string;
+  attempts: number;
+  correct: number;
+  accuracy: number;
+};
+
+type PracticeSessionHistoryItem = {
+  id: string;
+  level: number;
+  trainingPhase: TrainingTaskType;
+  selectionAlgorithm: ChordSelectionAlgorithm;
+  startedAt: string;
+  completedAt: string | null;
+  totalTrials: number;
+  correctTrials: number;
+  accuracy: number;
+  longestStreak: number;
+  weakestChord: SessionChordStat | null;
+  strongestChord: SessionChordStat | null;
+};
+
+type PracticeSessionTrialDetail = {
+  id: string;
+  trialIndex: number;
+  promptChordSlug: string;
+  promptLabel: string;
+  selectedChordSlug: string | null;
+  selectedNotes: string[] | null;
+  selectedToneNote: string | null;
+  isCorrect: boolean;
+  responseMs: number | null;
+  createdAt: string;
+};
+
+type PracticeSessionDetail = PracticeSessionHistoryItem & {
+  chordStats: SessionChordStat[];
+  trials: PracticeSessionTrialDetail[];
 };
 
 type PracticeTrialResponse = {
@@ -132,6 +173,29 @@ function getIdFromResponse(data: unknown, keys: string[]) {
 
 function readTimerMs() {
   return performance.now();
+}
+
+function formatSessionDate(value: string | null) {
+  if (!value) return "In progress";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatResponseMs(value: number | null) {
+  if (value === null) return "-";
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}s`;
+  return `${value}ms`;
+}
+
+function formatSelectedAnswer(trial: PracticeSessionTrialDetail) {
+  if (trial.selectedChordSlug) return trial.selectedChordSlug.replace(/-/g, " ");
+  if (trial.selectedNotes?.length) return trial.selectedNotes.join(" ");
+  if (trial.selectedToneNote) return trial.selectedToneNote;
+  return "-";
 }
 
 function exerciseFromTrial(trial: PracticeTrialResponse, choices: ColorChoice[]): TrainingExercise {
@@ -288,6 +352,11 @@ export function SessionTrainer({
   const [levelMessage, setLevelMessage] = useState<string>();
   const [settingsToast, setSettingsToast] = useState<string>();
   const [summary, setSummary] = useState<{ correct: number; total: number; minutes: number }>();
+  const [history, setHistory] = useState<PracticeSessionHistoryItem[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string>();
+  const [selectedSessionDetail, setSelectedSessionDetail] = useState<PracticeSessionDetail>();
+  const [isSessionDetailLoading, setIsSessionDetailLoading] = useState(false);
   const selectChoiceRef = useRef<(choice: ColorChoice) => void>(() => undefined);
   const nextRef = useRef<() => void>(() => undefined);
   const autoNextTimeoutRef = useRef<number | undefined>(undefined);
@@ -312,6 +381,34 @@ export function SessionTrainer({
   useEffect(() => {
     setDefaultSoundEngine(soundEngine);
   }, [soundEngine]);
+
+  const loadPracticeHistory = useCallback(async () => {
+    setIsHistoryLoading(true);
+    setHistoryError(undefined);
+
+    try {
+      const response = await fetch(`/api/children/${childId}/practice-sessions`, { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error("Unable to load history");
+      }
+
+      const data = (await response.json()) as { sessions?: PracticeSessionHistoryItem[] };
+      setHistory(data.sessions ?? []);
+    } catch {
+      setHistoryError("We could not load practice history.");
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [childId]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void loadPracticeHistory();
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [loadPracticeHistory]);
 
   async function playExercise(exercise = current) {
     if (!exercise) return;
@@ -338,6 +435,31 @@ export function SessionTrainer({
 
   async function handlePlay() {
     await playExercise();
+  }
+
+  async function handleOpenSessionDetail(sessionId: string) {
+    setIsSessionDetailLoading(true);
+    setHistoryError(undefined);
+
+    try {
+      const response = await fetch(`/api/practice-sessions/${sessionId}`, { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error("Unable to load session");
+      }
+
+      const data = (await response.json()) as { session?: PracticeSessionDetail };
+
+      if (!data.session) {
+        throw new Error("Missing session");
+      }
+
+      setSelectedSessionDetail(data.session);
+    } catch {
+      setHistoryError("We could not load that practice session.");
+    } finally {
+      setIsSessionDetailLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -441,6 +563,7 @@ export function SessionTrainer({
         total,
         minutes: Math.max(1, Math.round(durationMs / 60000)),
       });
+      void loadPracticeHistory();
     } catch {
       setError("We could not save the completed session.");
     } finally {
@@ -819,6 +942,83 @@ export function SessionTrainer({
     </div>
   ) : null;
 
+  const sessionDetailModal = selectedSessionDetail ? (
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/45 p-4" role="presentation">
+      <div
+        className="max-h-[90svh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Practice session details"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Badge tone="green">Session record</Badge>
+            <h2 className="mt-3 text-2xl font-black text-slate-950">
+              {formatSessionDate(selectedSessionDetail.completedAt)}
+            </h2>
+            <p className="text-sm font-bold text-slate-500">
+              Level {selectedSessionDetail.level} · {selectedSessionDetail.trainingPhase.replace(/_/g, " ")}
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" aria-label="Close session details" onClick={() => setSelectedSessionDetail(undefined)}>
+            <X className="size-5" aria-hidden="true" />
+          </Button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-2xl bg-emerald-50 p-3">
+            <div className="text-xs font-black uppercase text-emerald-700">Accuracy</div>
+            <div className="text-2xl font-black text-slate-950">{selectedSessionDetail.accuracy}%</div>
+          </div>
+          <div className="rounded-2xl bg-sky-50 p-3">
+            <div className="text-xs font-black uppercase text-sky-700">Streak</div>
+            <div className="text-2xl font-black text-slate-950">{selectedSessionDetail.longestStreak}</div>
+          </div>
+          <div className="rounded-2xl bg-amber-50 p-3">
+            <div className="text-xs font-black uppercase text-amber-700">Weakest</div>
+            <div className="text-lg font-black text-slate-950">{selectedSessionDetail.weakestChord?.label ?? "-"}</div>
+          </div>
+          <div className="rounded-2xl bg-pink-50 p-3">
+            <div className="text-xs font-black uppercase text-pink-700">Strongest</div>
+            <div className="text-lg font-black text-slate-950">{selectedSessionDetail.strongestChord?.label ?? "-"}</div>
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <h3 className="text-lg font-black text-slate-900">Chord stats</h3>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {selectedSessionDetail.chordStats.map((stat) => (
+              <div key={stat.chordSlug} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
+                <span>{stat.label}</span>
+                <span>{stat.correct}/{stat.attempts} · {stat.accuracy}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <h3 className="text-lg font-black text-slate-900">Trial record</h3>
+          <div className="mt-2 space-y-2">
+            {selectedSessionDetail.trials.map((trial) => (
+              <div
+                key={trial.id}
+                className={[
+                  "grid gap-2 rounded-2xl px-3 py-2 text-sm font-bold sm:grid-cols-[3rem_1fr_1fr_5rem]",
+                  trial.isCorrect ? "bg-emerald-50 text-emerald-900" : "bg-red-50 text-red-900",
+                ].join(" ")}
+              >
+                <span>#{trial.trialIndex + 1}</span>
+                <span>{trial.promptLabel}</span>
+                <span>{formatSelectedAnswer(trial)}</span>
+                <span>{formatResponseMs(trial.responseMs)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const settingsSheet = (
     <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
       <SheetContent onClose={() => setIsSettingsOpen(false)}>
@@ -1126,6 +1326,7 @@ export function SessionTrainer({
 
         {settingsSheet}
         {settingsToastElement}
+        {sessionDetailModal}
       </div>
     );
   }
@@ -1146,6 +1347,7 @@ export function SessionTrainer({
       <div className="space-y-5">
         {error ? <Alert tone="danger">{error}</Alert> : null}
         {levelMessage ? <Alert tone="success">{levelMessage}</Alert> : null}
+        {historyError ? <Alert tone="danger">{historyError}</Alert> : null}
 
         <div className="rounded-3xl bg-white/80 p-5 ring-2 ring-white">
           <div className="mb-4 flex items-center gap-3 text-slate-800">
@@ -1159,10 +1361,57 @@ export function SessionTrainer({
             {isStarting ? "Starting" : "Begin"}
           </Button>
         </div>
+
+        <div className="rounded-3xl bg-white/80 p-5 ring-2 ring-white">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-lg font-black text-slate-900">Practice history</div>
+              <div className="text-sm font-bold text-slate-500">Recent completed sessions</div>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => void loadPracticeHistory()} disabled={isHistoryLoading}>
+              {isHistoryLoading ? "Loading" : "Refresh"}
+            </Button>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            {history.length ? (
+              history.map((session) => (
+                <div
+                  key={session.id}
+                  className="grid gap-3 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-700 sm:grid-cols-[1fr_auto]"
+                >
+                  <div>
+                    <div className="font-black text-slate-950">{formatSessionDate(session.completedAt)}</div>
+                    <div>
+                      {session.correctTrials}/{session.totalTrials} · {session.accuracy}% · streak {session.longestStreak}
+                    </div>
+                    <div className="text-slate-500">
+                      Weakest: {session.weakestChord?.label ?? "-"} · Strongest: {session.strongestChord?.label ?? "-"}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleOpenSessionDetail(session.id)}
+                    disabled={isSessionDetailLoading}
+                    className="self-center"
+                  >
+                    Details
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-500">
+                {isHistoryLoading ? "Loading practice history..." : "No completed practice sessions yet."}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {settingsSheet}
       {settingsToastElement}
+      {sessionDetailModal}
     </Card>
   );
 }

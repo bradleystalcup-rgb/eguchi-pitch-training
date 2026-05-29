@@ -41,6 +41,47 @@ export type ChildProfileSummary = {
   progress: ProgressSnapshot;
 };
 
+export type SessionChordStat = {
+  chordSlug: string;
+  label: string;
+  attempts: number;
+  correct: number;
+  accuracy: number;
+};
+
+export type PracticeSessionHistoryItem = {
+  id: string;
+  level: number;
+  trainingPhase: TrainingTaskType;
+  selectionAlgorithm: ChordSelectionAlgorithm;
+  startedAt: Date;
+  completedAt: Date | null;
+  totalTrials: number;
+  correctTrials: number;
+  accuracy: number;
+  longestStreak: number;
+  weakestChord: SessionChordStat | null;
+  strongestChord: SessionChordStat | null;
+};
+
+export type PracticeSessionTrialDetail = {
+  id: string;
+  trialIndex: number;
+  promptChordSlug: string;
+  promptLabel: string;
+  selectedChordSlug: string | null;
+  selectedNotes: string[] | null;
+  selectedToneNote: string | null;
+  isCorrect: boolean;
+  responseMs: number | null;
+  createdAt: Date;
+};
+
+export type PracticeSessionDetail = PracticeSessionHistoryItem & {
+  trials: PracticeSessionTrialDetail[];
+  chordStats: SessionChordStat[];
+};
+
 export function isValidChordSelectionAlgorithm(
   value: unknown,
 ): value is ChordSelectionAlgorithm {
@@ -94,6 +135,58 @@ function noteSetsMatch(selectedNotes: readonly string[], expectedNotes: readonly
   const expected = [...new Set(expectedNotes.map(normalizeNoteName))].sort();
 
   return selected.length === expected.length && selected.every((note, index) => note === expected[index]);
+}
+
+function chordLabelForSlug(slug: string) {
+  const chord = DEFAULT_CHORD_DEFINITIONS.find((definition) => definition.slug === slug);
+  return chord?.name.replace(" chord", "") ?? slug;
+}
+
+function longestCorrectStreak(trials: readonly { isCorrect: boolean }[]) {
+  let current = 0;
+  let longest = 0;
+
+  for (const trial of trials) {
+    current = trial.isCorrect ? current + 1 : 0;
+    longest = Math.max(longest, current);
+  }
+
+  return longest;
+}
+
+function summarizeChordStats(trials: readonly { promptChordSlug: string; isCorrect: boolean }[]) {
+  const stats = new Map<string, { attempts: number; correct: number }>();
+
+  for (const trial of trials) {
+    const existing = stats.get(trial.promptChordSlug) ?? { attempts: 0, correct: 0 };
+    existing.attempts += 1;
+    existing.correct += Number(trial.isCorrect);
+    stats.set(trial.promptChordSlug, existing);
+  }
+
+  return [...stats.entries()]
+    .map(([chordSlug, stat]) => ({
+      chordSlug,
+      label: chordLabelForSlug(chordSlug),
+      attempts: stat.attempts,
+      correct: stat.correct,
+      accuracy: stat.attempts ? Math.round((stat.correct / stat.attempts) * 100) : 0,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function pickWeakestChord(stats: readonly SessionChordStat[]) {
+  return (
+    [...stats].sort((left, right) => left.accuracy - right.accuracy || right.attempts - left.attempts || left.label.localeCompare(right.label))[0] ??
+    null
+  );
+}
+
+function pickStrongestChord(stats: readonly SessionChordStat[]) {
+  return (
+    [...stats].sort((left, right) => right.accuracy - left.accuracy || right.attempts - left.attempts || left.label.localeCompare(right.label))[0] ??
+    null
+  );
 }
 
 async function chooseAdaptiveChordSlug(input: {
@@ -814,4 +907,110 @@ export async function getLatestCompletedSession(childProfileId: string) {
     .limit(1);
 
   return session;
+}
+
+export async function listPracticeSessionHistoryForParent(input: {
+  parentUserId: string;
+  childProfileId: string;
+  limit?: number;
+}): Promise<PracticeSessionHistoryItem[] | null> {
+  const child = await getChildProfileForParent(input.parentUserId, input.childProfileId);
+
+  if (!child) return null;
+
+  const sessions = await db
+    .select()
+    .from(trainingSessions)
+    .where(
+      and(
+        eq(trainingSessions.parentUserId, input.parentUserId),
+        eq(trainingSessions.childProfileId, input.childProfileId),
+        eq(trainingSessions.status, "completed"),
+      ),
+    )
+    .orderBy(desc(trainingSessions.completedAt), desc(trainingSessions.startedAt))
+    .limit(input.limit ?? 12);
+
+  return Promise.all(
+    sessions.map(async (session) => {
+      const trials = await db
+        .select({
+          promptChordSlug: trainingTrials.promptChordSlug,
+          isCorrect: trainingTrials.isCorrect,
+        })
+        .from(trainingTrials)
+        .where(eq(trainingTrials.sessionId, session.id))
+        .orderBy(asc(trainingTrials.trialIndex));
+      const chordStats = summarizeChordStats(trials);
+      const totalTrials = trials.length || session.totalTrials;
+      const correctTrials = trials.filter((trial) => trial.isCorrect).length || session.correctTrials;
+
+      return {
+        id: session.id,
+        level: session.level,
+        trainingPhase: session.trainingPhase,
+        selectionAlgorithm: session.selectionAlgorithm,
+        startedAt: session.startedAt,
+        completedAt: session.completedAt,
+        totalTrials,
+        correctTrials,
+        accuracy: totalTrials ? Math.round((correctTrials / totalTrials) * 100) : 0,
+        longestStreak: longestCorrectStreak(trials),
+        weakestChord: pickWeakestChord(chordStats),
+        strongestChord: pickStrongestChord(chordStats),
+      };
+    }),
+  );
+}
+
+export async function getPracticeSessionDetailForParent(input: {
+  parentUserId: string;
+  sessionId: string;
+}): Promise<PracticeSessionDetail | null> {
+  const [session] = await db
+    .select()
+    .from(trainingSessions)
+    .where(and(eq(trainingSessions.id, input.sessionId), eq(trainingSessions.parentUserId, input.parentUserId)))
+    .limit(1);
+
+  if (!session) return null;
+
+  const trials = await db
+    .select({
+      id: trainingTrials.id,
+      trialIndex: trainingTrials.trialIndex,
+      promptChordSlug: trainingTrials.promptChordSlug,
+      selectedChordSlug: trainingTrials.selectedChordSlug,
+      selectedNotes: trainingTrials.selectedNotes,
+      selectedToneNote: trainingTrials.selectedToneNote,
+      isCorrect: trainingTrials.isCorrect,
+      responseMs: trainingTrials.responseMs,
+      createdAt: trainingTrials.createdAt,
+    })
+    .from(trainingTrials)
+    .where(eq(trainingTrials.sessionId, session.id))
+    .orderBy(asc(trainingTrials.trialIndex));
+  const chordStats = summarizeChordStats(trials);
+  const totalTrials = trials.length || session.totalTrials;
+  const correctTrials = trials.filter((trial) => trial.isCorrect).length || session.correctTrials;
+
+  return {
+    id: session.id,
+    level: session.level,
+    trainingPhase: session.trainingPhase,
+    selectionAlgorithm: session.selectionAlgorithm,
+    startedAt: session.startedAt,
+    completedAt: session.completedAt,
+    totalTrials,
+    correctTrials,
+    accuracy: totalTrials ? Math.round((correctTrials / totalTrials) * 100) : 0,
+    longestStreak: longestCorrectStreak(trials),
+    weakestChord: pickWeakestChord(chordStats),
+    strongestChord: pickStrongestChord(chordStats),
+    chordStats,
+    trials: trials.map((trial) => ({
+      ...trial,
+      promptLabel: chordLabelForSlug(trial.promptChordSlug),
+    })),
+  };
 }
