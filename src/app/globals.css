@@ -41,6 +41,6 @@ a {
 }
 
 .next-chord-button-progress {
-  animation: next-chord-progress 750ms linear forwards;
+  animation: next-chord-progress 650ms linear forwards;
   transform-origin: left;
 }

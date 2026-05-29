@@ -143,6 +143,8 @@ const hotkeySets: Record<HotkeyMode, string[]> = {
   right: ["6", "7", "8", "9", "0", "y", "u", "i", "o", "p", "h", "j", "k", "l", ";"],
 };
 
+const AUTO_NEXT_MS = 650;
+
 const chromaticNoteChoices = [
   { value: "C", sharp: "C", flat: "C" },
   { value: "C#", sharp: "C♯", flat: "D♭" },
@@ -274,6 +276,8 @@ export function SessionTrainer({
   const [settingsToast, setSettingsToast] = useState<string>();
   const [summary, setSummary] = useState<{ correct: number; total: number; minutes: number }>();
   const selectChoiceRef = useRef<(choice: ColorChoice) => void>(() => undefined);
+  const nextRef = useRef<() => void>(() => undefined);
+  const autoNextTimeoutRef = useRef<number | undefined>(undefined);
   const settingsToastTimeoutRef = useRef<number | undefined>(undefined);
 
   const current = sessionExercises[index];
@@ -323,6 +327,9 @@ export function SessionTrainer({
 
   useEffect(() => {
     return () => {
+      if (autoNextTimeoutRef.current) {
+        window.clearTimeout(autoNextTimeoutRef.current);
+      }
       if (settingsToastTimeoutRef.current) {
         window.clearTimeout(settingsToastTimeoutRef.current);
       }
@@ -484,6 +491,13 @@ export function SessionTrainer({
       setAnswerIsCorrect(nextIsCorrect);
       setPendingNextExercise(nextExercise);
       setNextButtonProgressKey((value) => value + 1);
+
+      if (autoNext) {
+        autoNextTimeoutRef.current = window.setTimeout(() => {
+          autoNextTimeoutRef.current = undefined;
+          void advanceAfterAnswer(nextIsCorrect, nextExercise);
+        }, AUTO_NEXT_MS);
+      }
     } catch {
       setError("We could not save that answer. You can keep practicing, but this trial may need to be retried.");
     } finally {
@@ -523,17 +537,27 @@ export function SessionTrainer({
     };
   });
 
+  useEffect(() => {
+    nextRef.current = () => {
+      void handleNext();
+    };
+  });
+
   async function handleNext() {
+    if (autoNextTimeoutRef.current) {
+      window.clearTimeout(autoNextTimeoutRef.current);
+      autoNextTimeoutRef.current = undefined;
+    }
+
     await advanceAfterAnswer(isCorrect);
   }
 
-  function handleNextProgressEnd() {
-    if (!autoNext || !answered || isPaused || isSubmittingAttempt || isCompleting) return;
-
-    void advanceAfterAnswer(isCorrect);
-  }
-
   function handleReset() {
+    if (autoNextTimeoutRef.current) {
+      window.clearTimeout(autoNextTimeoutRef.current);
+      autoNextTimeoutRef.current = undefined;
+    }
+
     setSessionId(undefined);
     setSessionStartedAt(undefined);
     setTrialStartedAt(undefined);
@@ -557,6 +581,11 @@ export function SessionTrainer({
     setIsPaused(true);
     setPauseStartedAt(readTimerMs());
     setIsSettingsOpen(true);
+
+    if (autoNextTimeoutRef.current) {
+      window.clearTimeout(autoNextTimeoutRef.current);
+      autoNextTimeoutRef.current = undefined;
+    }
   }
 
   function handleResume() {
@@ -629,7 +658,7 @@ export function SessionTrainer({
   }
 
   useEffect(() => {
-    if (!sessionId || !current || isPaused || answered || isSubmittingAttempt) return;
+    if (!sessionId || !current || isPaused || isSubmittingAttempt) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -637,6 +666,14 @@ export function SessionTrainer({
       if (target?.closest("input, select, textarea, button")) return;
 
       const key = event.key.toLowerCase();
+
+      if (answered) {
+        if (event.code !== "Space" && key !== " ") return;
+        event.preventDefault();
+        nextRef.current();
+        return;
+      }
+
       const choiceIndex = hotkeySets[hotkeyMode].indexOf(key);
 
       if (current.answerMode === "note_set") {
@@ -988,14 +1025,13 @@ export function SessionTrainer({
                   disabled={!answered || isSubmittingAttempt || isCompleting}
                   aria-disabled={autoNext && answered}
                   onClick={autoNext ? undefined : handleNext}
-                  className="relative mt-auto w-full overflow-hidden sm:w-auto sm:self-center"
+                  className="relative mt-auto w-full overflow-visible shadow-none sm:w-auto sm:self-center"
                 >
                   {answered ? (
                     <span
                       key={nextButtonProgressKey}
-                      className="next-chord-button-progress absolute inset-x-0 bottom-0 h-2 rounded-b-2xl bg-amber-700/70"
+                      className="next-chord-button-progress absolute inset-x-0 top-full h-2 rounded-b-2xl bg-emerald-600"
                       aria-hidden="true"
-                      onAnimationEnd={handleNextProgressEnd}
                     />
                   ) : null}
                   <span className="relative z-10">{index >= total - 1 ? "Finish" : "Next chord"}</span>
