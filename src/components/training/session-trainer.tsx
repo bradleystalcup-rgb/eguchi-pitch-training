@@ -67,6 +67,18 @@ type PracticeTrialResponse = {
   correctChoiceId: string;
 };
 
+type QueuedAttempt = {
+  answer: {
+    selectedChordSlug?: string;
+    selectedNotes?: string[];
+    selectedToneNote?: string;
+  };
+  responseMs: number;
+  correctCount: number;
+  index: number;
+  sessionExercises: TrainingExercise[];
+};
+
 function colorClassForHex(hex: string) {
   return hex === "#f8fafc" ? "bg-slate-50" : "";
 }
@@ -250,6 +262,7 @@ export function SessionTrainer({
   const [selectedNotes, setSelectedNotes] = useState<string[]>([]);
   const [selectedToneNote, setSelectedToneNote] = useState<string>();
   const [answerIsCorrect, setAnswerIsCorrect] = useState<boolean>();
+  const [isAutoNextPending, setIsAutoNextPending] = useState(false);
   const [nextButtonProgressKey, setNextButtonProgressKey] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -278,19 +291,14 @@ export function SessionTrainer({
   const selectChoiceRef = useRef<(choice: ColorChoice) => void>(() => undefined);
   const nextRef = useRef<() => void>(() => undefined);
   const autoNextTimeoutRef = useRef<number | undefined>(undefined);
-  const autoNextAdvanceRef = useRef<{
-    answerWasCorrect: boolean;
-    nextExercise: TrainingExercise | null;
-    correctCount: number;
-    index: number;
-    sessionExercises: TrainingExercise[];
-  } | undefined>(undefined);
+  const queuedAttemptRef = useRef<QueuedAttempt | undefined>(undefined);
   const settingsToastTimeoutRef = useRef<number | undefined>(undefined);
 
   const current = sessionExercises[index];
   const total = sessionId ? sessionTotalTrials : sessionExercises.length;
   const isCorrect = Boolean(answerIsCorrect);
   const answered = answerIsCorrect !== undefined;
+  const answerLocked = answered || isAutoNextPending || isSubmittingAttempt;
   const progress = useMemo(() => (total ? Math.round(((index + Number(answered)) / total) * 100) : 0), [answered, index, total]);
   const hotkeyLabels = useMemo(() => {
     const keys = hotkeySets[hotkeyMode];
@@ -337,7 +345,7 @@ export function SessionTrainer({
       if (autoNextTimeoutRef.current) {
         window.clearTimeout(autoNextTimeoutRef.current);
       }
-      autoNextAdvanceRef.current = undefined;
+      queuedAttemptRef.current = undefined;
       if (settingsToastTimeoutRef.current) {
         window.clearTimeout(settingsToastTimeoutRef.current);
       }
@@ -349,6 +357,7 @@ export function SessionTrainer({
     setSelectedNotes([]);
     setSelectedToneNote(undefined);
     setAnswerIsCorrect(undefined);
+    setIsAutoNextPending(false);
   }
 
   async function handleBegin() {
@@ -476,11 +485,8 @@ export function SessionTrainer({
     }
   }
 
-  async function submitAttempt(answer: { selectedChordSlug?: string; selectedNotes?: string[]; selectedToneNote?: string }) {
-    if (!current || answered || !sessionId || isPaused || isSubmittingAttempt) return;
-
-    const answeredAt = readTimerMs();
-    const responseMs = Math.max(0, Math.round(answeredAt - (trialStartedAt ?? answeredAt)));
+  async function saveQueuedAttempt(queuedAttempt: QueuedAttempt, shouldAdvanceOnReply: boolean) {
+    if (!current || !sessionId || isPaused || isSubmittingAttempt) return;
 
     setError(undefined);
     setIsSubmittingAttempt(true);
@@ -491,12 +497,12 @@ export function SessionTrainer({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          trialIndex: index,
+          trialIndex: queuedAttempt.index,
           chordSlug: current.chord.slug,
-          selectedChordSlug: answer.selectedChordSlug,
-          selectedNotes: answer.selectedNotes,
-          selectedToneNote: answer.selectedToneNote,
-          responseMs,
+          selectedChordSlug: queuedAttempt.answer.selectedChordSlug,
+          selectedNotes: queuedAttempt.answer.selectedNotes,
+          selectedToneNote: queuedAttempt.answer.selectedToneNote,
+          responseMs: queuedAttempt.responseMs,
         }),
       });
 
@@ -509,55 +515,80 @@ export function SessionTrainer({
       const nextIsCorrect = Boolean(data.attempt?.isCorrect);
       setAnswerIsCorrect(nextIsCorrect);
       setPendingNextExercise(nextExercise);
-      setNextButtonProgressKey((value) => value + 1);
-      autoNextAdvanceRef.current = {
-        answerWasCorrect: nextIsCorrect,
-        nextExercise,
-        correctCount,
-        index,
-        sessionExercises,
-      };
+      queuedAttemptRef.current = undefined;
+      setIsAutoNextPending(false);
 
-      if (autoNext) {
-        autoNextTimeoutRef.current = window.setTimeout(() => {
-          const autoAdvance = autoNextAdvanceRef.current;
-          autoNextTimeoutRef.current = undefined;
-          autoNextAdvanceRef.current = undefined;
-
-          if (!autoAdvance) return;
-
-          void advanceAfterAnswer(autoAdvance.answerWasCorrect, autoAdvance.nextExercise, {
-            correctCount: autoAdvance.correctCount,
-            index: autoAdvance.index,
-            sessionExercises: autoAdvance.sessionExercises,
-          });
-        }, AUTO_NEXT_MS);
+      if (shouldAdvanceOnReply) {
+        await advanceAfterAnswer(nextIsCorrect, nextExercise, {
+          correctCount: queuedAttempt.correctCount,
+          index: queuedAttempt.index,
+          sessionExercises: queuedAttempt.sessionExercises,
+        });
       }
     } catch {
+      queuedAttemptRef.current = undefined;
+      setIsAutoNextPending(false);
       setError("We could not save that answer. You can keep practicing, but this trial may need to be retried.");
     } finally {
       setIsSubmittingAttempt(false);
     }
   }
 
+  function queueAttempt(answer: { selectedChordSlug?: string; selectedNotes?: string[]; selectedToneNote?: string }) {
+    if (!current || answerLocked || !sessionId || isPaused) return;
+
+    const answeredAt = readTimerMs();
+    const responseMs = Math.max(0, Math.round(answeredAt - (trialStartedAt ?? answeredAt)));
+    const queuedAttempt: QueuedAttempt = {
+      answer,
+      responseMs,
+      correctCount,
+      index,
+      sessionExercises,
+    };
+
+    queuedAttemptRef.current = queuedAttempt;
+    setError(undefined);
+
+    if (answer.selectedChordSlug) {
+      setAnswerIsCorrect(answer.selectedChordSlug === current.correctChoiceId);
+    }
+
+    if (!autoNext) {
+      void saveQueuedAttempt(queuedAttempt, false);
+      return;
+    }
+
+    setIsAutoNextPending(true);
+    setNextButtonProgressKey((value) => value + 1);
+    autoNextTimeoutRef.current = window.setTimeout(() => {
+      const nextQueuedAttempt = queuedAttemptRef.current;
+      autoNextTimeoutRef.current = undefined;
+
+      if (!nextQueuedAttempt) return;
+
+      void saveQueuedAttempt(nextQueuedAttempt, true);
+    }, AUTO_NEXT_MS);
+  }
+
   async function handleSelect(choice: ColorChoice) {
     setSelectedId(choice.id);
-    await submitAttempt({ selectedChordSlug: choice.id });
+    queueAttempt({ selectedChordSlug: choice.id });
   }
 
   async function handleNoteSetSubmit() {
     if (!selectedNotes.length) return;
-    await submitAttempt({ selectedNotes });
+    queueAttempt({ selectedNotes });
   }
 
   async function handleToneNoteSelect(note: string) {
     const toneNote = toneNoteForChoice(note, current?.isolatedToneNote);
     setSelectedToneNote(toneNote);
-    await submitAttempt({ selectedToneNote: toneNote });
+    queueAttempt({ selectedToneNote: toneNote });
   }
 
   function toggleSelectedNote(note: string) {
-    if (answered || isSubmittingAttempt) return;
+    if (answerLocked) return;
 
     setSelectedNotes((notes) => {
       if (notes.includes(note)) return notes.filter((selectedNote) => selectedNote !== note);
@@ -583,7 +614,8 @@ export function SessionTrainer({
       window.clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = undefined;
     }
-    autoNextAdvanceRef.current = undefined;
+    queuedAttemptRef.current = undefined;
+    setIsAutoNextPending(false);
 
     await advanceAfterAnswer(isCorrect);
   }
@@ -593,7 +625,8 @@ export function SessionTrainer({
       window.clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = undefined;
     }
-    autoNextAdvanceRef.current = undefined;
+    queuedAttemptRef.current = undefined;
+    setIsAutoNextPending(false);
 
     setSessionId(undefined);
     setSessionStartedAt(undefined);
@@ -623,7 +656,8 @@ export function SessionTrainer({
       window.clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = undefined;
     }
-    autoNextAdvanceRef.current = undefined;
+    queuedAttemptRef.current = undefined;
+    setIsAutoNextPending(false);
   }
 
   function handleResume() {
@@ -696,7 +730,7 @@ export function SessionTrainer({
   }
 
   useEffect(() => {
-    if (!sessionId || !current || isPaused || isSubmittingAttempt) return;
+    if (!sessionId || !current || isPaused || isSubmittingAttempt || isAutoNextPending) return;
 
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -1001,7 +1035,7 @@ export function SessionTrainer({
               </div>
 
               <div className="min-h-16 rounded-3xl bg-white/65 p-4 text-lg font-black text-slate-800 ring-2 ring-white">
-                {!answered ? current.prompt : null}
+                {!answerLocked ? current.prompt : null}
                 {answered && isCorrect ? (
                   <span className="inline-flex items-center gap-2 text-emerald-700">
                     <Sparkles className="h-6 w-6" aria-hidden="true" />
@@ -1015,15 +1049,15 @@ export function SessionTrainer({
                 <div className="space-y-4">
                   <NoteChoiceGrid
                     selectedNotes={selectedNotes}
-                    disabled={answered || isSubmittingAttempt}
+                    disabled={answerLocked}
                     accidentalMode={accidentalMode}
                     hotkeyLabels={hotkeyLabels}
                     onToggle={toggleSelectedNote}
                   />
-                  {!answered ? (
+                  {!answerLocked ? (
                     <Button
                       size="lg"
-                      disabled={!selectedNotes.length || isSubmittingAttempt}
+                      disabled={!selectedNotes.length || answerLocked}
                       onClick={handleNoteSetSubmit}
                       className="w-full sm:w-auto sm:self-center"
                     >
@@ -1036,7 +1070,7 @@ export function SessionTrainer({
               {current.answerMode === "single_note" ? (
                 <NoteChoiceGrid
                   selectedNotes={selectedToneNote ? [pitchFromToneNote(selectedToneNote) ?? ""] : []}
-                  disabled={answered || isSubmittingAttempt}
+                  disabled={answerLocked}
                   accidentalMode={accidentalMode}
                   hotkeyLabels={hotkeyLabels}
                   onToggle={handleToneNoteSelect}
@@ -1049,27 +1083,27 @@ export function SessionTrainer({
                   selectedId={selectedId}
                   correctId={answered ? current.correctChoiceId : undefined}
                   incorrectId={answered && !isCorrect ? selectedId : undefined}
-                  disabled={answered || isSubmittingAttempt}
+                  disabled={answerLocked}
                   hotkeyLabels={hotkeyLabels}
                   showColorAddKeys={showColorKeys}
                   onSelect={handleSelect}
                 />
               ) : null}
 
-              {answered || !autoNext ? (
+              {answerLocked || !autoNext ? (
                 <div className="relative mt-auto w-full pb-2 sm:w-auto sm:self-center">
                   <Button
                     size="lg"
                     variant="secondary"
-                    disabled={!answered || isSubmittingAttempt || isCompleting}
-                    aria-disabled={autoNext && answered}
+                    disabled={!answered || isAutoNextPending || isSubmittingAttempt || isCompleting}
+                    aria-disabled={autoNext && answerLocked}
                     onClick={autoNext ? undefined : handleNext}
                     className="relative z-10 w-full shadow-none sm:w-auto"
                   >
                     <span>{index >= total - 1 ? "Finish" : "Next chord"}</span>
                   </Button>
                   <span className="absolute inset-x-0 bottom-0 h-2 rounded-b-2xl bg-amber-600" aria-hidden="true">
-                    {answered ? (
+                    {autoNext && answerLocked ? (
                       <span
                         key={nextButtonProgressKey}
                         className="next-chord-button-progress block h-full rounded-b-2xl bg-emerald-600"
