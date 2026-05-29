@@ -278,6 +278,13 @@ export function SessionTrainer({
   const selectChoiceRef = useRef<(choice: ColorChoice) => void>(() => undefined);
   const nextRef = useRef<() => void>(() => undefined);
   const autoNextTimeoutRef = useRef<number | undefined>(undefined);
+  const autoNextAdvanceRef = useRef<{
+    answerWasCorrect: boolean;
+    nextExercise: TrainingExercise | null;
+    correctCount: number;
+    index: number;
+    sessionExercises: TrainingExercise[];
+  } | undefined>(undefined);
   const settingsToastTimeoutRef = useRef<number | undefined>(undefined);
 
   const current = sessionExercises[index];
@@ -330,6 +337,7 @@ export function SessionTrainer({
       if (autoNextTimeoutRef.current) {
         window.clearTimeout(autoNextTimeoutRef.current);
       }
+      autoNextAdvanceRef.current = undefined;
       if (settingsToastTimeoutRef.current) {
         window.clearTimeout(settingsToastTimeoutRef.current);
       }
@@ -431,10 +439,21 @@ export function SessionTrainer({
     }
   }
 
-  async function advanceAfterAnswer(answerWasCorrect: boolean, issuedNextExercise = pendingNextExercise) {
-    const nextCorrectCount = correctCount + Number(answerWasCorrect);
-    const nextIndex = index + 1;
-    const nextExercise = issuedNextExercise ?? sessionExercises[nextIndex];
+  async function advanceAfterAnswer(
+    answerWasCorrect: boolean,
+    issuedNextExercise = pendingNextExercise,
+    snapshot?: {
+      correctCount: number;
+      index: number;
+      sessionExercises: TrainingExercise[];
+    },
+  ) {
+    const baseCorrectCount = snapshot?.correctCount ?? correctCount;
+    const baseIndex = snapshot?.index ?? index;
+    const baseExercises = snapshot?.sessionExercises ?? sessionExercises;
+    const nextCorrectCount = baseCorrectCount + Number(answerWasCorrect);
+    const nextIndex = baseIndex + 1;
+    const nextExercise = issuedNextExercise ?? baseExercises[nextIndex];
 
     if (!nextExercise) {
       await handleComplete(nextCorrectCount);
@@ -491,11 +510,27 @@ export function SessionTrainer({
       setAnswerIsCorrect(nextIsCorrect);
       setPendingNextExercise(nextExercise);
       setNextButtonProgressKey((value) => value + 1);
+      autoNextAdvanceRef.current = {
+        answerWasCorrect: nextIsCorrect,
+        nextExercise,
+        correctCount,
+        index,
+        sessionExercises,
+      };
 
       if (autoNext) {
         autoNextTimeoutRef.current = window.setTimeout(() => {
+          const autoAdvance = autoNextAdvanceRef.current;
           autoNextTimeoutRef.current = undefined;
-          void advanceAfterAnswer(nextIsCorrect, nextExercise);
+          autoNextAdvanceRef.current = undefined;
+
+          if (!autoAdvance) return;
+
+          void advanceAfterAnswer(autoAdvance.answerWasCorrect, autoAdvance.nextExercise, {
+            correctCount: autoAdvance.correctCount,
+            index: autoAdvance.index,
+            sessionExercises: autoAdvance.sessionExercises,
+          });
         }, AUTO_NEXT_MS);
       }
     } catch {
@@ -548,6 +583,7 @@ export function SessionTrainer({
       window.clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = undefined;
     }
+    autoNextAdvanceRef.current = undefined;
 
     await advanceAfterAnswer(isCorrect);
   }
@@ -557,6 +593,7 @@ export function SessionTrainer({
       window.clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = undefined;
     }
+    autoNextAdvanceRef.current = undefined;
 
     setSessionId(undefined);
     setSessionStartedAt(undefined);
@@ -586,6 +623,7 @@ export function SessionTrainer({
       window.clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = undefined;
     }
+    autoNextAdvanceRef.current = undefined;
   }
 
   function handleResume() {
@@ -1019,23 +1057,27 @@ export function SessionTrainer({
               ) : null}
 
               {answered || !autoNext ? (
-                <Button
-                  size="lg"
-                  variant="secondary"
-                  disabled={!answered || isSubmittingAttempt || isCompleting}
-                  aria-disabled={autoNext && answered}
-                  onClick={autoNext ? undefined : handleNext}
-                  className="relative mt-auto w-full overflow-visible shadow-none sm:w-auto sm:self-center"
-                >
-                  {answered ? (
-                    <span
-                      key={nextButtonProgressKey}
-                      className="next-chord-button-progress absolute inset-x-0 top-full h-2 rounded-b-2xl bg-emerald-600"
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                  <span className="relative z-10">{index >= total - 1 ? "Finish" : "Next chord"}</span>
-                </Button>
+                <div className="relative mt-auto w-full pb-2 sm:w-auto sm:self-center">
+                  <Button
+                    size="lg"
+                    variant="secondary"
+                    disabled={!answered || isSubmittingAttempt || isCompleting}
+                    aria-disabled={autoNext && answered}
+                    onClick={autoNext ? undefined : handleNext}
+                    className="relative z-10 w-full shadow-none sm:w-auto"
+                  >
+                    <span>{index >= total - 1 ? "Finish" : "Next chord"}</span>
+                  </Button>
+                  <span className="absolute inset-x-0 bottom-0 h-2 rounded-b-2xl bg-amber-600" aria-hidden="true">
+                    {answered ? (
+                      <span
+                        key={nextButtonProgressKey}
+                        className="next-chord-button-progress block h-full rounded-b-2xl bg-emerald-600"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </span>
+                </div>
               ) : null}
             </div>
           )}
