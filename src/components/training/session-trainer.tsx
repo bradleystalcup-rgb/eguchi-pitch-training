@@ -610,10 +610,18 @@ export function SessionTrainer({
   });
 
   async function handleNext() {
+    const queuedAttempt = queuedAttemptRef.current;
+
     if (autoNextTimeoutRef.current) {
       window.clearTimeout(autoNextTimeoutRef.current);
       autoNextTimeoutRef.current = undefined;
     }
+
+    if (queuedAttempt) {
+      await saveQueuedAttempt(queuedAttempt, true);
+      return;
+    }
+
     queuedAttemptRef.current = undefined;
     setIsAutoNextPending(false);
 
@@ -1095,9 +1103,8 @@ export function SessionTrainer({
                   <Button
                     size="lg"
                     variant="secondary"
-                    disabled={!answered || isAutoNextPending || isSubmittingAttempt || isCompleting}
-                    aria-disabled={autoNext && answerLocked}
-                    onClick={autoNext ? undefined : handleNext}
+                    disabled={(!answered && !queuedAttemptRef.current) || isSubmittingAttempt || isCompleting}
+                    onClick={handleNext}
                     className="relative z-10 w-full shadow-none sm:w-auto"
                   >
                     <span>{index >= total - 1 ? "Finish" : "Next chord"}</span>
