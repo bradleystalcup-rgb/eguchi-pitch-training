@@ -38,6 +38,7 @@ export type ChildProfileSummary = {
   birthYear: number | null;
   currentLevel: number;
   showColorAccessibilityKeys: boolean;
+  warmUpChordsEnabled: boolean | null;
   progress: ProgressSnapshot;
 };
 
@@ -343,6 +344,7 @@ function toChildSummary(row: {
   birthYear: number | null;
   currentLevel: number;
   showColorAccessibilityKeys: boolean;
+  warmUpChordsEnabled: boolean | null;
   trainingPhase: TrainingTaskType | null;
   sessionsCompleted: number | null;
   trialsCompleted: number | null;
@@ -355,6 +357,7 @@ function toChildSummary(row: {
     birthYear: row.birthYear,
     currentLevel: row.currentLevel,
     showColorAccessibilityKeys: row.showColorAccessibilityKeys,
+    warmUpChordsEnabled: row.warmUpChordsEnabled,
     progress: {
       currentLevel: row.currentLevel,
       trainingPhase: row.trainingPhase ?? "chord_identification",
@@ -414,6 +417,7 @@ export async function listChildProfilesForParent(parentUserId: string): Promise<
       birthYear: childProfiles.birthYear,
       currentLevel: childProfiles.currentLevel,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
+      warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
       trainingPhase: childTrainingProgress.trainingPhase,
       sessionsCompleted: childTrainingProgress.sessionsCompleted,
       trialsCompleted: childTrainingProgress.trialsCompleted,
@@ -442,6 +446,7 @@ export async function getChildProfileForParent(
       birthYear: childProfiles.birthYear,
       currentLevel: childProfiles.currentLevel,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
+      warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
       trainingPhase: childTrainingProgress.trainingPhase,
       sessionsCompleted: childTrainingProgress.sessionsCompleted,
       trialsCompleted: childTrainingProgress.trialsCompleted,
@@ -486,6 +491,7 @@ export async function updateChildLevelForParent(input: {
         birthYear: childProfiles.birthYear,
         currentLevel: childProfiles.currentLevel,
         showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
+        warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
       });
 
     if (!profile) return null;
@@ -517,6 +523,7 @@ export async function updateChildLevelForParent(input: {
     return {
       ...profile,
       showColorAccessibilityKeys: profile.showColorAccessibilityKeys,
+      warmUpChordsEnabled: profile.warmUpChordsEnabled,
       trainingPhase: progress?.trainingPhase ?? "chord_identification",
       sessionsCompleted: progress?.sessionsCompleted ?? 0,
       trialsCompleted: progress?.trialsCompleted ?? 0,
@@ -528,18 +535,30 @@ export async function updateChildLevelForParent(input: {
   return updated ? toChildSummary(updated) : null;
 }
 
-export async function updateChildColorAccessibilityForParent(input: {
+export async function updateChildPracticeSettingsForParent(input: {
   parentUserId: string;
   childProfileId: string;
-  showColorAccessibilityKeys: boolean;
+  showColorAccessibilityKeys?: boolean;
+  warmUpChordsEnabled?: boolean | null;
 }): Promise<ChildProfileSummary | null> {
   const now = new Date();
+  const settings: {
+    showColorAccessibilityKeys?: boolean;
+    warmUpChordsEnabled?: boolean | null;
+    updatedAt: Date;
+  } = { updatedAt: now };
+
+  if (input.showColorAccessibilityKeys !== undefined) {
+    settings.showColorAccessibilityKeys = input.showColorAccessibilityKeys;
+  }
+
+  if (input.warmUpChordsEnabled !== undefined) {
+    settings.warmUpChordsEnabled = input.warmUpChordsEnabled;
+  }
+
   const [profile] = await db
     .update(childProfiles)
-    .set({
-      showColorAccessibilityKeys: input.showColorAccessibilityKeys,
-      updatedAt: now,
-    })
+    .set(settings)
     .where(
       and(
         eq(childProfiles.id, input.childProfileId),
@@ -552,6 +571,7 @@ export async function updateChildColorAccessibilityForParent(input: {
       birthYear: childProfiles.birthYear,
       currentLevel: childProfiles.currentLevel,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
+      warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
     });
 
   if (!profile) return null;

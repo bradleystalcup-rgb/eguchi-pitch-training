@@ -37,6 +37,12 @@ export type TrainingExercise = {
   isolatedToneNote?: string;
 };
 
+type WarmupExercise = {
+  id: string;
+  label: string;
+  notes: string[];
+};
+
 type PracticeSessionResponse = {
   session?: {
     id?: string;
@@ -198,6 +204,47 @@ function formatSelectedAnswer(trial: PracticeSessionTrialDetail) {
   return "-";
 }
 
+function labelForWarmupChord(chord: ReturnType<typeof getActiveChordsForLevel>[number], answerMode: AnswerMode) {
+  if (answerMode === "note_set") return chord.notes.join(" ");
+  if (answerMode === "single_note") return chord.notes[0] ?? chord.answerLabel;
+  return chord.answerLabel;
+}
+
+function notesForWarmupChord(chord: ReturnType<typeof getActiveChordsForLevel>[number], answerMode: AnswerMode) {
+  if (answerMode === "single_note") return [chord.toneNotes[0] ?? "C4"];
+  return chord.toneNotes;
+}
+
+function createWarmupsForLevel(level: number, answerMode: AnswerMode): WarmupExercise[] {
+  const chords = getActiveChordsForLevel(level);
+  const anchorChord = chords.find((chord) => chord.slug === "white-red-ceg") ?? chords[0];
+
+  if (!anchorChord) return [];
+
+  const remainingChords = chords.filter((chord) => chord.slug !== anchorChord.slug);
+  const randomChord =
+    remainingChords.length > 0
+      ? remainingChords[Math.floor(Math.random() * remainingChords.length)]
+      : undefined;
+  const warmups = [
+    {
+      id: `warmup-${anchorChord.slug}`,
+      label: labelForWarmupChord(anchorChord, answerMode),
+      notes: notesForWarmupChord(anchorChord, answerMode),
+    },
+  ];
+
+  if (randomChord) {
+    warmups.push({
+      id: `warmup-${randomChord.slug}`,
+      label: labelForWarmupChord(randomChord, answerMode),
+      notes: notesForWarmupChord(randomChord, answerMode),
+    });
+  }
+
+  return warmups;
+}
+
 function exerciseFromTrial(trial: PracticeTrialResponse, choices: ColorChoice[]): TrainingExercise {
   return {
     id: `${trial.promptChordSlug}-${trial.trialIndex}`,
@@ -300,6 +347,7 @@ export function SessionTrainer({
   childName = "Mika",
   level = 2,
   showColorAccessibilityKeys = false,
+  warmUpChordsEnabled = null,
   exercises,
   onComplete,
 }: {
@@ -307,6 +355,7 @@ export function SessionTrainer({
   childName?: string;
   level?: number;
   showColorAccessibilityKeys?: boolean;
+  warmUpChordsEnabled?: boolean | null;
   exercises?: TrainingExercise[];
   onComplete?: (summary: { correct: number; total: number }) => void;
 }) {
@@ -320,6 +369,12 @@ export function SessionTrainer({
   const [activeExercises, setActiveExercises] = useState<TrainingExercise[]>();
   const [sessionTotalTrials, setSessionTotalTrials] = useState(previewExercises.length);
   const [pendingNextExercise, setPendingNextExercise] = useState<TrainingExercise | null>();
+  const [warmUpPreference, setWarmUpPreference] = useState<boolean | null>(warmUpChordsEnabled);
+  const [isWarmUpPromptOpen, setIsWarmUpPromptOpen] = useState(false);
+  const [saveWarmUpPreference, setSaveWarmUpPreference] = useState(false);
+  const [isSavingWarmUpPreference, setIsSavingWarmUpPreference] = useState(false);
+  const [warmupQueue, setWarmupQueue] = useState<WarmupExercise[]>([]);
+  const [warmupIndex, setWarmupIndex] = useState(0);
   const sessionExercises = activeExercises ?? previewExercises;
   const [index, setIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string>();
@@ -364,6 +419,8 @@ export function SessionTrainer({
   const settingsToastTimeoutRef = useRef<number | undefined>(undefined);
 
   const current = sessionExercises[index];
+  const currentWarmup = warmupQueue[warmupIndex];
+  const isWarmupActive = sessionId !== undefined && Boolean(currentWarmup);
   const total = sessionId ? sessionTotalTrials : sessionExercises.length;
   const isCorrect = Boolean(answerIsCorrect);
   const answered = answerIsCorrect !== undefined;
@@ -421,6 +478,17 @@ export function SessionTrainer({
     }
   }
 
+  async function playWarmup(warmup = currentWarmup) {
+    if (!warmup) return;
+
+    setIsPlaying(true);
+    try {
+      await playNotesChord({ notes: warmup.notes });
+    } finally {
+      setIsPlaying(false);
+    }
+  }
+
   function showSettingsToast() {
     if (settingsToastTimeoutRef.current) {
       window.clearTimeout(settingsToastTimeoutRef.current);
@@ -434,6 +502,22 @@ export function SessionTrainer({
   }
 
   async function handlePlay() {
+    await playExercise();
+  }
+
+  async function handleNextWarmup() {
+    const nextWarmupIndex = warmupIndex + 1;
+    const nextWarmup = warmupQueue[nextWarmupIndex];
+
+    if (nextWarmup) {
+      setWarmupIndex(nextWarmupIndex);
+      await playWarmup(nextWarmup);
+      return;
+    }
+
+    setWarmupQueue([]);
+    setWarmupIndex(0);
+    setTrialStartedAt(readTimerMs());
     await playExercise();
   }
 
@@ -482,7 +566,7 @@ export function SessionTrainer({
     setIsAutoNextPending(false);
   }
 
-  async function handleBegin() {
+  async function startPracticeSession(useWarmups: boolean) {
     setError(undefined);
     setIsStarting(true);
 
@@ -513,26 +597,45 @@ export function SessionTrainer({
       }
 
       const nextExercise = exerciseFromTrial(nextTrial, nextChoices);
+      const nextWarmups = useWarmups
+        ? createWarmupsForLevel(practiceLevel, nextExercise.answerMode)
+        : [];
       const now = readTimerMs();
       setSessionId(nextSessionId);
       setActiveExercises([nextExercise]);
       setSessionTotalTrials(nextTotalTrials);
       setPendingNextExercise(undefined);
       setSessionStartedAt(now);
-      setTrialStartedAt(now);
+      setTrialStartedAt(nextWarmups.length ? undefined : now);
       setPausedDurationMs(0);
       setPauseStartedAt(undefined);
       setIsPaused(false);
       setIndex(0);
+      setWarmupQueue(nextWarmups);
+      setWarmupIndex(0);
       clearAnswerState();
       setCorrectCount(0);
       setSummary(undefined);
-      void playExercise(nextExercise);
+      if (nextWarmups.length) {
+        void playWarmup(nextWarmups[0]);
+      } else {
+        void playExercise(nextExercise);
+      }
     } catch {
       setError("We could not begin this practice session.");
     } finally {
       setIsStarting(false);
     }
+  }
+
+  function handleBegin() {
+    if (warmUpPreference === null) {
+      setSaveWarmUpPreference(false);
+      setIsWarmUpPromptOpen(true);
+      return;
+    }
+
+    void startPracticeSession(warmUpPreference);
   }
 
   async function handleComplete(nextCorrectCount: number) {
@@ -733,6 +836,11 @@ export function SessionTrainer({
   });
 
   async function handleNext() {
+    if (isWarmupActive) {
+      await handleNextWarmup();
+      return;
+    }
+
     const queuedAttempt = queuedAttemptRef.current;
 
     if (autoNextTimeoutRef.current) {
@@ -766,9 +874,12 @@ export function SessionTrainer({
     setPauseStartedAt(undefined);
     setIsPaused(false);
     setIsSettingsOpen(false);
+    setIsWarmUpPromptOpen(false);
     setActiveExercises(undefined);
     setSessionTotalTrials(previewExercises.length);
     setPendingNextExercise(undefined);
+    setWarmupQueue([]);
+    setWarmupIndex(0);
     setIndex(0);
     clearAnswerState();
     setCorrectCount(0);
@@ -857,6 +968,64 @@ export function SessionTrainer({
       setError("We could not save the color key setting.");
     } finally {
       setIsSavingColorKeys(false);
+    }
+  }
+
+  async function handleWarmUpPromptChoice(useWarmups: boolean) {
+    setError(undefined);
+
+    if (saveWarmUpPreference) {
+      setIsSavingWarmUpPreference(true);
+
+      try {
+        const response = await fetch(`/api/children/${childId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ warmUpChordsEnabled: useWarmups }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to save warm-up preference");
+        }
+
+        setWarmUpPreference(useWarmups);
+        showSettingsToast();
+      } catch {
+        setError("We could not save the warm-up setting.");
+        setIsSavingWarmUpPreference(false);
+        return;
+      }
+
+      setIsSavingWarmUpPreference(false);
+    }
+
+    setIsWarmUpPromptOpen(false);
+    void startPracticeSession(useWarmups);
+  }
+
+  async function handleWarmUpPreferenceChange(nextValue: boolean | null) {
+    const previousValue = warmUpPreference;
+    setWarmUpPreference(nextValue);
+    setIsSavingWarmUpPreference(true);
+    setError(undefined);
+
+    try {
+      const response = await fetch(`/api/children/${childId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ warmUpChordsEnabled: nextValue }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to save warm-up preference");
+      }
+
+      showSettingsToast();
+    } catch {
+      setWarmUpPreference(previousValue);
+      setError("We could not save the warm-up setting.");
+    } finally {
+      setIsSavingWarmUpPreference(false);
     }
   }
 
@@ -1019,6 +1188,48 @@ export function SessionTrainer({
     </div>
   ) : null;
 
+  const warmUpPromptModal = isWarmUpPromptOpen ? (
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/45 p-4" role="presentation">
+      <div
+        className="w-full max-w-md rounded-3xl bg-white p-5 text-center shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Warm-up chords"
+      >
+        <Badge tone="amber">Warm-up</Badge>
+        <h2 className="mt-4 text-3xl font-black tracking-normal text-slate-950">
+          Would you like to start with a few warm up chords?
+        </h2>
+        <label className="mx-auto mt-5 flex max-w-xs items-center justify-center gap-3 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-black text-slate-800">
+          <input
+            type="checkbox"
+            checked={saveWarmUpPreference}
+            onChange={(event) => setSaveWarmUpPreference(event.target.checked)}
+            className="size-5 accent-emerald-500"
+          />
+          Save settings and don&apos;t ask again
+        </label>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <Button
+            size="lg"
+            variant="ghost"
+            onClick={() => void handleWarmUpPromptChoice(false)}
+            disabled={isSavingWarmUpPreference || isStarting}
+          >
+            No
+          </Button>
+          <Button
+            size="lg"
+            onClick={() => void handleWarmUpPromptChoice(true)}
+            disabled={isSavingWarmUpPreference || isStarting}
+          >
+            Yes
+          </Button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   const settingsSheet = (
     <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
       <SheetContent onClose={() => setIsSettingsOpen(false)}>
@@ -1048,6 +1259,33 @@ export function SessionTrainer({
             className="size-6 accent-emerald-500"
           />
         </label>
+
+        <div className="space-y-3">
+          <Label>Warm-up chords</Label>
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              variant={warmUpPreference === null ? "secondary" : "ghost"}
+              onClick={() => void handleWarmUpPreferenceChange(null)}
+              disabled={isSavingWarmUpPreference}
+            >
+              Ask
+            </Button>
+            <Button
+              variant={warmUpPreference === true ? "secondary" : "ghost"}
+              onClick={() => void handleWarmUpPreferenceChange(true)}
+              disabled={isSavingWarmUpPreference}
+            >
+              Yes
+            </Button>
+            <Button
+              variant={warmUpPreference === false ? "secondary" : "ghost"}
+              onClick={() => void handleWarmUpPreferenceChange(false)}
+              disabled={isSavingWarmUpPreference}
+            >
+              No
+            </Button>
+          </div>
+        </div>
 
         <label className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border-2 border-slate-100 bg-emerald-50 px-4 py-3 text-base font-black text-slate-900">
           Color keys
@@ -1232,6 +1470,25 @@ export function SessionTrainer({
                 <div className="mt-3 text-base font-bold text-slate-600">Options are open.</div>
               </div>
             </div>
+          ) : isWarmupActive && currentWarmup ? (
+            <div className="grid flex-1 place-items-center rounded-3xl bg-white/65 p-6 text-center ring-2 ring-white">
+              <div className="max-w-xl">
+                <Badge tone="amber">Warm-up {warmupIndex + 1} of {warmupQueue.length}</Badge>
+                <div className="mt-5 text-5xl font-black tracking-normal text-slate-950 sm:text-7xl">
+                  {currentWarmup.label}
+                </div>
+                <div className="mt-3 text-base font-bold text-slate-500">Listen and calibrate. This does not count.</div>
+                <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+                  <Button size="lg" onClick={() => void playWarmup()} disabled={isPlaying}>
+                    <Volume2 className="h-6 w-6" aria-hidden="true" />
+                    {isPlaying ? "Playing" : "Replay warm-up"}
+                  </Button>
+                  <Button size="lg" variant="secondary" onClick={() => void handleNextWarmup()} disabled={isPlaying}>
+                    {warmupIndex >= warmupQueue.length - 1 ? "Start practice" : "Next warm-up"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="flex flex-1 flex-col gap-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1327,6 +1584,7 @@ export function SessionTrainer({
         {settingsSheet}
         {settingsToastElement}
         {sessionDetailModal}
+        {warmUpPromptModal}
       </div>
     );
   }
@@ -1412,6 +1670,7 @@ export function SessionTrainer({
       {settingsSheet}
       {settingsToastElement}
       {sessionDetailModal}
+      {warmUpPromptModal}
     </Card>
   );
 }

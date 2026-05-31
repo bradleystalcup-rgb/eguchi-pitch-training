@@ -13,6 +13,7 @@ type ChildData = {
   level?: number | null;
   currentLevel?: number | null;
   showColorAccessibilityKeys?: boolean | null;
+  warmUpChordsEnabled?: boolean | null;
   progress?: { currentLevel?: number | null } | null;
 };
 
@@ -27,6 +28,7 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
     name: string;
     level?: number | null;
     showColorAccessibilityKeys: boolean;
+    warmUpChordsEnabled: boolean | null;
   }>();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -47,6 +49,7 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
                 name: nextChild.name ?? nextChild.displayName ?? "Learner",
                 level: clampLevel(nextChild.level ?? nextChild.currentLevel ?? nextChild.progress?.currentLevel),
                 showColorAccessibilityKeys: Boolean(nextChild.showColorAccessibilityKeys),
+                warmUpChordsEnabled: nextChild.warmUpChordsEnabled ?? null,
               }
             : undefined,
         );
@@ -83,6 +86,7 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
       childName={child.name}
       level={clampLevel(child.level)}
       showColorAccessibilityKeys={child.showColorAccessibilityKeys}
+      warmUpChordsEnabled={child.warmUpChordsEnabled}
     />
   );
 }

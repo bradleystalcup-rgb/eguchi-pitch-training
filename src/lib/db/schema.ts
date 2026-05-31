@@ -96,6 +96,7 @@ export const childProfiles = pgTable(
     birthYear: integer("birth_year"),
     currentLevel: integer("current_level").notNull().default(1),
     showColorAccessibilityKeys: boolean("show_color_accessibility_keys").notNull().default(false),
+    warmUpChordsEnabled: boolean("warm_up_chords_enabled"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -73,3 +73,11 @@ Restores level 1 as a valid learner level so the protocol can start with two act
 - Changes `child_profiles.current_level` and `child_training_progress.current_level` defaults from 2 to 1.
 - Replaces the level 2..15 CHECK constraints with level 1..15 constraints.
 - Existing students are not backfilled down; this only allows new or manually adjusted students to use level 1.
+
+## 0009_warmup_chord_preference.sql
+
+Adds a nullable per-child warm-up chord preference.
+
+- `NULL` means ask at the start of each practice session.
+- `TRUE` starts sessions with warm-up chords without asking.
+- `FALSE` skips warm-up chords without asking.

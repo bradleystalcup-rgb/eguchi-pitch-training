@@ -58,6 +58,8 @@ export async function PATCH(
         birthYear: child.birthYear,
         level: child.currentLevel,
         currentLevel: child.currentLevel,
+        showColorAccessibilityKeys: child.showColorAccessibilityKeys,
+        warmUpChordsEnabled: child.warmUpChordsEnabled,
         progress: child.progress,
       },
     });

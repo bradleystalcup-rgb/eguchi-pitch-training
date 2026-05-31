@@ -1,6 +1,6 @@
 import {
   getChildProfileForParent,
-  updateChildColorAccessibilityForParent,
+  updateChildPracticeSettingsForParent,
 } from "@/lib/training/persistence";
 import { getCurrentUser } from "@/lib/session";
 import { errorResponse, validateChildId } from "../_utils";
@@ -38,6 +38,7 @@ export async function GET(
         level: child.currentLevel,
         currentLevel: child.currentLevel,
         showColorAccessibilityKeys: child.showColorAccessibilityKeys,
+        warmUpChordsEnabled: child.warmUpChordsEnabled,
         progress: child.progress,
       },
     });
@@ -77,16 +78,34 @@ export async function PATCH(
   }
 
   const showColorAccessibilityKeys = (payload as Record<string, unknown>).showColorAccessibilityKeys;
+  const warmUpChordsEnabled = (payload as Record<string, unknown>).warmUpChordsEnabled;
 
-  if (typeof showColorAccessibilityKeys !== "boolean") {
+  if (showColorAccessibilityKeys !== undefined && typeof showColorAccessibilityKeys !== "boolean") {
     return errorResponse("bad_request", "showColorAccessibilityKeys must be a boolean.", 400);
   }
 
+  if (
+    warmUpChordsEnabled !== undefined &&
+    warmUpChordsEnabled !== null &&
+    typeof warmUpChordsEnabled !== "boolean"
+  ) {
+    return errorResponse("bad_request", "warmUpChordsEnabled must be a boolean or null.", 400);
+  }
+
+  if (showColorAccessibilityKeys === undefined && warmUpChordsEnabled === undefined) {
+    return errorResponse("bad_request", "At least one child setting is required.", 400);
+  }
+
   try {
-    const child = await updateChildColorAccessibilityForParent({
+    const child = await updateChildPracticeSettingsForParent({
       parentUserId: user.id,
       childProfileId: validChildId,
-      showColorAccessibilityKeys,
+      showColorAccessibilityKeys:
+        typeof showColorAccessibilityKeys === "boolean" ? showColorAccessibilityKeys : undefined,
+      warmUpChordsEnabled:
+        typeof warmUpChordsEnabled === "boolean" || warmUpChordsEnabled === null
+          ? warmUpChordsEnabled
+          : undefined,
     });
 
     if (!child) {
@@ -102,11 +121,12 @@ export async function PATCH(
         level: child.currentLevel,
         currentLevel: child.currentLevel,
         showColorAccessibilityKeys: child.showColorAccessibilityKeys,
+        warmUpChordsEnabled: child.warmUpChordsEnabled,
         progress: child.progress,
       },
     });
   } catch (error) {
-    console.error("Failed to update child accessibility settings", error);
-    return errorResponse("internal_error", "Unable to update child accessibility settings.", 500);
+    console.error("Failed to update child practice settings", error);
+    return errorResponse("internal_error", "Unable to update child practice settings.", 500);
   }
 }
