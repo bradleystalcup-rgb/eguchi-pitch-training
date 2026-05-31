@@ -531,6 +531,13 @@ export function SessionTrainer({
     await playExercise();
   }
 
+  async function handleSkipWarmup() {
+    setWarmupQueue([]);
+    setWarmupIndex(0);
+    setTrialStartedAt(readTimerMs());
+    await playExercise();
+  }
+
   async function handleOpenSessionDetail(sessionId: string) {
     setIsSessionDetailLoading(true);
     setHistoryError(undefined);
@@ -1516,6 +1523,9 @@ export function SessionTrainer({
                   </Button>
                   <Button size="lg" variant="secondary" onClick={() => void handleNextWarmup()} disabled={isPlaying}>
                     {warmupIndex >= warmupQueue.length - 1 ? "Start practice" : "Next warm-up"}
+                  </Button>
+                  <Button size="lg" variant="ghost" onClick={() => void handleSkipWarmup()} disabled={isPlaying}>
+                    Skip warm up
                   </Button>
                 </div>
               </div>
