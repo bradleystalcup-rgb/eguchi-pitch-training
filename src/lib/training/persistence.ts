@@ -39,6 +39,11 @@ export type ChildProfileSummary = {
   currentLevel: number;
   showColorAccessibilityKeys: boolean;
   warmUpChordsEnabled: boolean | null;
+  autoNextEnabled: boolean;
+  hotkeyMode: string;
+  accidentalMode: string;
+  chordSelectionAlgorithm: string;
+  soundEngine: string;
   progress: ProgressSnapshot;
 };
 
@@ -345,6 +350,11 @@ function toChildSummary(row: {
   currentLevel: number;
   showColorAccessibilityKeys: boolean;
   warmUpChordsEnabled: boolean | null;
+  autoNextEnabled: boolean;
+  hotkeyMode: string;
+  accidentalMode: string;
+  chordSelectionAlgorithm: string;
+  soundEngine: string;
   trainingPhase: TrainingTaskType | null;
   sessionsCompleted: number | null;
   trialsCompleted: number | null;
@@ -358,6 +368,11 @@ function toChildSummary(row: {
     currentLevel: row.currentLevel,
     showColorAccessibilityKeys: row.showColorAccessibilityKeys,
     warmUpChordsEnabled: row.warmUpChordsEnabled,
+    autoNextEnabled: row.autoNextEnabled,
+    hotkeyMode: row.hotkeyMode,
+    accidentalMode: row.accidentalMode,
+    chordSelectionAlgorithm: row.chordSelectionAlgorithm,
+    soundEngine: row.soundEngine,
     progress: {
       currentLevel: row.currentLevel,
       trainingPhase: row.trainingPhase ?? "chord_identification",
@@ -418,6 +433,11 @@ export async function listChildProfilesForParent(parentUserId: string): Promise<
       currentLevel: childProfiles.currentLevel,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
       warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
+      autoNextEnabled: childProfiles.autoNextEnabled,
+      hotkeyMode: childProfiles.hotkeyMode,
+      accidentalMode: childProfiles.accidentalMode,
+      chordSelectionAlgorithm: childProfiles.chordSelectionAlgorithm,
+      soundEngine: childProfiles.soundEngine,
       trainingPhase: childTrainingProgress.trainingPhase,
       sessionsCompleted: childTrainingProgress.sessionsCompleted,
       trialsCompleted: childTrainingProgress.trialsCompleted,
@@ -447,6 +467,11 @@ export async function getChildProfileForParent(
       currentLevel: childProfiles.currentLevel,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
       warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
+      autoNextEnabled: childProfiles.autoNextEnabled,
+      hotkeyMode: childProfiles.hotkeyMode,
+      accidentalMode: childProfiles.accidentalMode,
+      chordSelectionAlgorithm: childProfiles.chordSelectionAlgorithm,
+      soundEngine: childProfiles.soundEngine,
       trainingPhase: childTrainingProgress.trainingPhase,
       sessionsCompleted: childTrainingProgress.sessionsCompleted,
       trialsCompleted: childTrainingProgress.trialsCompleted,
@@ -492,6 +517,11 @@ export async function updateChildLevelForParent(input: {
         currentLevel: childProfiles.currentLevel,
         showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
         warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
+        autoNextEnabled: childProfiles.autoNextEnabled,
+        hotkeyMode: childProfiles.hotkeyMode,
+        accidentalMode: childProfiles.accidentalMode,
+        chordSelectionAlgorithm: childProfiles.chordSelectionAlgorithm,
+        soundEngine: childProfiles.soundEngine,
       });
 
     if (!profile) return null;
@@ -524,6 +554,11 @@ export async function updateChildLevelForParent(input: {
       ...profile,
       showColorAccessibilityKeys: profile.showColorAccessibilityKeys,
       warmUpChordsEnabled: profile.warmUpChordsEnabled,
+      autoNextEnabled: profile.autoNextEnabled,
+      hotkeyMode: profile.hotkeyMode,
+      accidentalMode: profile.accidentalMode,
+      chordSelectionAlgorithm: profile.chordSelectionAlgorithm,
+      soundEngine: profile.soundEngine,
       trainingPhase: progress?.trainingPhase ?? "chord_identification",
       sessionsCompleted: progress?.sessionsCompleted ?? 0,
       trialsCompleted: progress?.trialsCompleted ?? 0,
@@ -540,11 +575,21 @@ export async function updateChildPracticeSettingsForParent(input: {
   childProfileId: string;
   showColorAccessibilityKeys?: boolean;
   warmUpChordsEnabled?: boolean | null;
+  autoNextEnabled?: boolean;
+  hotkeyMode?: string;
+  accidentalMode?: string;
+  chordSelectionAlgorithm?: string;
+  soundEngine?: string;
 }): Promise<ChildProfileSummary | null> {
   const now = new Date();
   const settings: {
     showColorAccessibilityKeys?: boolean;
     warmUpChordsEnabled?: boolean | null;
+    autoNextEnabled?: boolean;
+    hotkeyMode?: string;
+    accidentalMode?: string;
+    chordSelectionAlgorithm?: string;
+    soundEngine?: string;
     updatedAt: Date;
   } = { updatedAt: now };
 
@@ -555,6 +600,11 @@ export async function updateChildPracticeSettingsForParent(input: {
   if (input.warmUpChordsEnabled !== undefined) {
     settings.warmUpChordsEnabled = input.warmUpChordsEnabled;
   }
+  if (input.autoNextEnabled !== undefined) settings.autoNextEnabled = input.autoNextEnabled;
+  if (input.hotkeyMode !== undefined) settings.hotkeyMode = input.hotkeyMode;
+  if (input.accidentalMode !== undefined) settings.accidentalMode = input.accidentalMode;
+  if (input.chordSelectionAlgorithm !== undefined) settings.chordSelectionAlgorithm = input.chordSelectionAlgorithm;
+  if (input.soundEngine !== undefined) settings.soundEngine = input.soundEngine;
 
   const [profile] = await db
     .update(childProfiles)
@@ -572,6 +622,11 @@ export async function updateChildPracticeSettingsForParent(input: {
       currentLevel: childProfiles.currentLevel,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
       warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
+      autoNextEnabled: childProfiles.autoNextEnabled,
+      hotkeyMode: childProfiles.hotkeyMode,
+      accidentalMode: childProfiles.accidentalMode,
+      chordSelectionAlgorithm: childProfiles.chordSelectionAlgorithm,
+      soundEngine: childProfiles.soundEngine,
     });
 
   if (!profile) return null;

@@ -60,6 +60,11 @@ export async function PATCH(
         currentLevel: child.currentLevel,
         showColorAccessibilityKeys: child.showColorAccessibilityKeys,
         warmUpChordsEnabled: child.warmUpChordsEnabled,
+        autoNextEnabled: child.autoNextEnabled,
+        hotkeyMode: child.hotkeyMode,
+        accidentalMode: child.accidentalMode,
+        chordSelectionAlgorithm: child.chordSelectionAlgorithm,
+        soundEngine: child.soundEngine,
         progress: child.progress,
       },
     });

@@ -20,6 +20,11 @@ function childResponse(child: ChildProfileSummary) {
     currentLevel: child.currentLevel,
     showColorAccessibilityKeys: child.showColorAccessibilityKeys,
     warmUpChordsEnabled: child.warmUpChordsEnabled,
+    autoNextEnabled: child.autoNextEnabled,
+    hotkeyMode: child.hotkeyMode,
+    accidentalMode: child.accidentalMode,
+    chordSelectionAlgorithm: child.chordSelectionAlgorithm,
+    soundEngine: child.soundEngine,
     progress: child.progress,
   };
 }
@@ -77,6 +82,11 @@ export async function POST(request: Request) {
           currentLevel: child.currentLevel,
           showColorAccessibilityKeys: child.showColorAccessibilityKeys,
           warmUpChordsEnabled: child.warmUpChordsEnabled,
+          autoNextEnabled: child.autoNextEnabled,
+          hotkeyMode: child.hotkeyMode,
+          accidentalMode: child.accidentalMode,
+          chordSelectionAlgorithm: child.chordSelectionAlgorithm,
+          soundEngine: child.soundEngine,
           progress: {
             currentLevel: child.currentLevel,
             trainingPhase: "chord_identification",

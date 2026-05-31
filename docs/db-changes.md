@@ -81,3 +81,10 @@ Adds a nullable per-child warm-up chord preference.
 - `NULL` means ask at the start of each practice session.
 - `TRUE` starts sessions with warm-up chords without asking.
 - `FALSE` skips warm-up chords without asking.
+
+## 0010_child_practice_preferences.sql
+
+Adds per-child defaults for practice room controls.
+
+- Auto-next, hotkey side, note-name display, chord selection algorithm, and sound engine now persist with the learner profile.
+- The learner settings modal and practice drawer can edit the same settings.

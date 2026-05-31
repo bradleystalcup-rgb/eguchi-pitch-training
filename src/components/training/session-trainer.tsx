@@ -348,6 +348,11 @@ export function SessionTrainer({
   level = 2,
   showColorAccessibilityKeys = false,
   warmUpChordsEnabled = null,
+  autoNextEnabled = false,
+  hotkeyMode: initialHotkeyMode = "left",
+  accidentalMode: initialAccidentalMode = "sharps",
+  chordSelectionAlgorithm = "random",
+  soundEngine: initialSoundEngine = "tone",
   exercises,
   onComplete,
 }: {
@@ -356,6 +361,11 @@ export function SessionTrainer({
   level?: number;
   showColorAccessibilityKeys?: boolean;
   warmUpChordsEnabled?: boolean | null;
+  autoNextEnabled?: boolean;
+  hotkeyMode?: HotkeyMode;
+  accidentalMode?: AccidentalMode;
+  chordSelectionAlgorithm?: ChordSelectionAlgorithm;
+  soundEngine?: SoundEngineKind;
   exercises?: TrainingExercise[];
   onComplete?: (summary: { correct: number; total: number }) => void;
 }) {
@@ -396,11 +406,11 @@ export function SessionTrainer({
   const [isCompleting, setIsCompleting] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSavingLevel, setIsSavingLevel] = useState(false);
-  const [autoNext, setAutoNext] = useState(false);
-  const [hotkeyMode, setHotkeyMode] = useState<HotkeyMode>("left");
-  const [accidentalMode, setAccidentalMode] = useState<AccidentalMode>("sharps");
-  const [selectionAlgorithm, setSelectionAlgorithm] = useState<ChordSelectionAlgorithm>("random");
-  const [soundEngine, setSoundEngine] = useState<SoundEngineKind>("tone");
+  const [autoNext, setAutoNext] = useState(autoNextEnabled);
+  const [hotkeyMode, setHotkeyMode] = useState<HotkeyMode>(initialHotkeyMode);
+  const [accidentalMode, setAccidentalMode] = useState<AccidentalMode>(initialAccidentalMode);
+  const [selectionAlgorithm, setSelectionAlgorithm] = useState<ChordSelectionAlgorithm>(chordSelectionAlgorithm);
+  const [soundEngine, setSoundEngine] = useState<SoundEngineKind>(initialSoundEngine);
   const [showColorKeys, setShowColorKeys] = useState(showColorAccessibilityKeys);
   const [isSavingColorKeys, setIsSavingColorKeys] = useState(false);
   const [error, setError] = useState<string>();
@@ -1029,6 +1039,26 @@ export function SessionTrainer({
     }
   }
 
+  async function savePracticePreference(settings: Record<string, boolean | string | null>) {
+    setError(undefined);
+
+    try {
+      const response = await fetch(`/api/children/${childId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to save practice setting");
+      }
+
+      showSettingsToast();
+    } catch {
+      setError("We could not save the practice setting.");
+    }
+  }
+
   useEffect(() => {
     if (!sessionId || !current || isPaused || isSubmittingAttempt || isAutoNextPending) return;
 
@@ -1253,8 +1283,9 @@ export function SessionTrainer({
             type="checkbox"
             checked={autoNext}
             onChange={(event) => {
-              setAutoNext(event.target.checked);
-              showSettingsToast();
+              const nextValue = event.target.checked;
+              setAutoNext(nextValue);
+              void savePracticePreference({ autoNextEnabled: nextValue });
             }}
             className="size-6 accent-emerald-500"
           />
@@ -1306,7 +1337,7 @@ export function SessionTrainer({
               onClick={() => {
                 if (selectionAlgorithm !== "random") {
                   setSelectionAlgorithm("random");
-                  showSettingsToast();
+                  void savePracticePreference({ chordSelectionAlgorithm: "random" });
                 }
               }}
               disabled={Boolean(sessionId)}
@@ -1318,7 +1349,7 @@ export function SessionTrainer({
               onClick={() => {
                 if (selectionAlgorithm !== "adaptive") {
                   setSelectionAlgorithm("adaptive");
-                  showSettingsToast();
+                  void savePracticePreference({ chordSelectionAlgorithm: "adaptive" });
                 }
               }}
               disabled={Boolean(sessionId)}
@@ -1336,7 +1367,7 @@ export function SessionTrainer({
               onClick={() => {
                 if (hotkeyMode !== "left") {
                   setHotkeyMode("left");
-                  showSettingsToast();
+                  void savePracticePreference({ hotkeyMode: "left" });
                 }
               }}
             >
@@ -1347,7 +1378,7 @@ export function SessionTrainer({
               onClick={() => {
                 if (hotkeyMode !== "right") {
                   setHotkeyMode("right");
-                  showSettingsToast();
+                  void savePracticePreference({ hotkeyMode: "right" });
                 }
               }}
             >
@@ -1364,7 +1395,7 @@ export function SessionTrainer({
               onClick={() => {
                 if (accidentalMode !== "sharps") {
                   setAccidentalMode("sharps");
-                  showSettingsToast();
+                  void savePracticePreference({ accidentalMode: "sharps" });
                 }
               }}
             >
@@ -1375,7 +1406,7 @@ export function SessionTrainer({
               onClick={() => {
                 if (accidentalMode !== "flats") {
                   setAccidentalMode("flats");
-                  showSettingsToast();
+                  void savePracticePreference({ accidentalMode: "flats" });
                 }
               }}
             >
@@ -1393,7 +1424,7 @@ export function SessionTrainer({
               const nextSoundEngine = event.target.value as SoundEngineKind;
               if (nextSoundEngine !== soundEngine) {
                 setSoundEngine(nextSoundEngine);
-                showSettingsToast();
+                void savePracticePreference({ soundEngine: nextSoundEngine });
               }
             }}
             className="min-h-14 w-full rounded-2xl border-2 border-slate-200 bg-white px-4 text-base font-bold text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100"

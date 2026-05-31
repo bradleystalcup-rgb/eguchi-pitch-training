@@ -39,6 +39,11 @@ export async function GET(
         currentLevel: child.currentLevel,
         showColorAccessibilityKeys: child.showColorAccessibilityKeys,
         warmUpChordsEnabled: child.warmUpChordsEnabled,
+        autoNextEnabled: child.autoNextEnabled,
+        hotkeyMode: child.hotkeyMode,
+        accidentalMode: child.accidentalMode,
+        chordSelectionAlgorithm: child.chordSelectionAlgorithm,
+        soundEngine: child.soundEngine,
         progress: child.progress,
       },
     });
@@ -79,6 +84,11 @@ export async function PATCH(
 
   const showColorAccessibilityKeys = (payload as Record<string, unknown>).showColorAccessibilityKeys;
   const warmUpChordsEnabled = (payload as Record<string, unknown>).warmUpChordsEnabled;
+  const autoNextEnabled = (payload as Record<string, unknown>).autoNextEnabled;
+  const hotkeyMode = (payload as Record<string, unknown>).hotkeyMode;
+  const accidentalMode = (payload as Record<string, unknown>).accidentalMode;
+  const chordSelectionAlgorithm = (payload as Record<string, unknown>).chordSelectionAlgorithm;
+  const soundEngine = (payload as Record<string, unknown>).soundEngine;
 
   if (showColorAccessibilityKeys !== undefined && typeof showColorAccessibilityKeys !== "boolean") {
     return errorResponse("bad_request", "showColorAccessibilityKeys must be a boolean.", 400);
@@ -93,7 +103,30 @@ export async function PATCH(
   }
 
   if (showColorAccessibilityKeys === undefined && warmUpChordsEnabled === undefined) {
-    return errorResponse("bad_request", "At least one child setting is required.", 400);
+    if (
+      autoNextEnabled === undefined &&
+      hotkeyMode === undefined &&
+      accidentalMode === undefined &&
+      chordSelectionAlgorithm === undefined &&
+      soundEngine === undefined
+    ) {
+      return errorResponse("bad_request", "At least one child setting is required.", 400);
+    }
+  }
+  if (autoNextEnabled !== undefined && typeof autoNextEnabled !== "boolean") {
+    return errorResponse("bad_request", "autoNextEnabled must be a boolean.", 400);
+  }
+  if (hotkeyMode !== undefined && hotkeyMode !== "left" && hotkeyMode !== "right") {
+    return errorResponse("bad_request", "hotkeyMode must be left or right.", 400);
+  }
+  if (accidentalMode !== undefined && accidentalMode !== "sharps" && accidentalMode !== "flats") {
+    return errorResponse("bad_request", "accidentalMode must be sharps or flats.", 400);
+  }
+  if (chordSelectionAlgorithm !== undefined && chordSelectionAlgorithm !== "random" && chordSelectionAlgorithm !== "adaptive") {
+    return errorResponse("bad_request", "chordSelectionAlgorithm must be random or adaptive.", 400);
+  }
+  if (soundEngine !== undefined && soundEngine !== "tone" && soundEngine !== "native-synth" && soundEngine !== "sampled") {
+    return errorResponse("bad_request", "soundEngine must be tone, native-synth, or sampled.", 400);
   }
 
   try {
@@ -106,6 +139,11 @@ export async function PATCH(
         typeof warmUpChordsEnabled === "boolean" || warmUpChordsEnabled === null
           ? warmUpChordsEnabled
           : undefined,
+      autoNextEnabled: typeof autoNextEnabled === "boolean" ? autoNextEnabled : undefined,
+      hotkeyMode: typeof hotkeyMode === "string" ? hotkeyMode : undefined,
+      accidentalMode: typeof accidentalMode === "string" ? accidentalMode : undefined,
+      chordSelectionAlgorithm: typeof chordSelectionAlgorithm === "string" ? chordSelectionAlgorithm : undefined,
+      soundEngine: typeof soundEngine === "string" ? soundEngine : undefined,
     });
 
     if (!child) {
@@ -122,6 +160,11 @@ export async function PATCH(
         currentLevel: child.currentLevel,
         showColorAccessibilityKeys: child.showColorAccessibilityKeys,
         warmUpChordsEnabled: child.warmUpChordsEnabled,
+        autoNextEnabled: child.autoNextEnabled,
+        hotkeyMode: child.hotkeyMode,
+        accidentalMode: child.accidentalMode,
+        chordSelectionAlgorithm: child.chordSelectionAlgorithm,
+        soundEngine: child.soundEngine,
         progress: child.progress,
       },
     });

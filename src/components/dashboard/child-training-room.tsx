@@ -14,6 +14,11 @@ type ChildData = {
   currentLevel?: number | null;
   showColorAccessibilityKeys?: boolean | null;
   warmUpChordsEnabled?: boolean | null;
+  autoNextEnabled?: boolean | null;
+  hotkeyMode?: "left" | "right" | null;
+  accidentalMode?: "sharps" | "flats" | null;
+  chordSelectionAlgorithm?: "random" | "adaptive" | null;
+  soundEngine?: "tone" | "native-synth" | "sampled" | null;
   progress?: { currentLevel?: number | null } | null;
 };
 
@@ -29,6 +34,11 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
     level?: number | null;
     showColorAccessibilityKeys: boolean;
     warmUpChordsEnabled: boolean | null;
+    autoNextEnabled: boolean;
+    hotkeyMode: "left" | "right";
+    accidentalMode: "sharps" | "flats";
+    chordSelectionAlgorithm: "random" | "adaptive";
+    soundEngine: "tone" | "native-synth" | "sampled";
   }>();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -50,6 +60,11 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
                 level: clampLevel(nextChild.level ?? nextChild.currentLevel ?? nextChild.progress?.currentLevel),
                 showColorAccessibilityKeys: Boolean(nextChild.showColorAccessibilityKeys),
                 warmUpChordsEnabled: nextChild.warmUpChordsEnabled ?? null,
+                autoNextEnabled: Boolean(nextChild.autoNextEnabled),
+                hotkeyMode: nextChild.hotkeyMode ?? "left",
+                accidentalMode: nextChild.accidentalMode ?? "sharps",
+                chordSelectionAlgorithm: nextChild.chordSelectionAlgorithm ?? "random",
+                soundEngine: nextChild.soundEngine ?? "tone",
               }
             : undefined,
         );
@@ -87,6 +102,11 @@ export function ChildTrainingRoom({ childId }: { childId: string }) {
       level={clampLevel(child.level)}
       showColorAccessibilityKeys={child.showColorAccessibilityKeys}
       warmUpChordsEnabled={child.warmUpChordsEnabled}
+      autoNextEnabled={child.autoNextEnabled}
+      hotkeyMode={child.hotkeyMode}
+      accidentalMode={child.accidentalMode}
+      chordSelectionAlgorithm={child.chordSelectionAlgorithm}
+      soundEngine={child.soundEngine}
     />
   );
 }
