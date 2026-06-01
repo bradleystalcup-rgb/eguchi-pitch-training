@@ -36,16 +36,16 @@ function DailySessionRing({
   const isComplete = day.count >= goal;
 
   return (
-    <div className={["relative shrink-0 text-center", isToday ? "w-16" : "w-12"].join(" ")}>
+    <div className="relative w-12 shrink-0 text-center">
       <div
         className={[
-          "relative grid place-items-center rounded-full bg-slate-100 shadow-inner ring-1 ring-white",
-          isToday ? "size-16" : "size-12",
+          "relative grid size-12 place-items-center rounded-full bg-slate-100 shadow-inner ring-2",
+          isToday ? "ring-sky-300" : "ring-white",
         ].join(" ")}
         style={{ background: `conic-gradient(#10b981 ${percent}%, #e2e8f0 0)` }}
         aria-label={`${dayLabel(day.date)}: ${day.count} of ${goal} sessions`}
       >
-        <div className={["grid place-items-center rounded-full bg-white font-black text-slate-950", isToday ? "size-11 text-sm" : "size-8 text-xs"].join(" ")}>
+        <div className="grid size-8 place-items-center rounded-full bg-white text-xs font-black text-slate-950">
           {isToday ? `${day.count}/${goal}` : day.count}
         </div>
       </div>
@@ -85,6 +85,10 @@ export function ChildProgressCard({
       </CardHeader>
 
       <div className="rounded-2xl bg-white/75 p-3 ring-2 ring-white">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="text-sm font-black text-slate-900">Practice history</div>
+          <div className="text-xs font-black uppercase text-sky-700">Today</div>
+        </div>
         <div className="flex items-end justify-between gap-1.5">
           {days.map((day, index) => (
             <DailySessionRing
