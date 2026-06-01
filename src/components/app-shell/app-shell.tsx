@@ -16,21 +16,21 @@ export function AppShell({
   isSignedIn?: boolean;
 }) {
   return (
-    <div className="min-h-screen bg-[#fff7d6] text-slate-900">
+    <div className="min-h-screen bg-violet-50 text-slate-900">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-slate-950 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
       >
         Skip to main content
       </a>
-      <header className="border-b-4 border-[#ffd166] bg-white/90 backdrop-blur">
+      <header className="border-b-4 border-violet-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <Link
             href="/"
             className="inline-flex items-center gap-3 text-xl font-black tracking-normal text-slate-950"
             aria-label="Eguchi Pitch Training home"
           >
-            <span className="grid size-11 place-items-center rounded-2xl bg-[#06d6a0] text-slate-950 shadow-sm">
+            <span className="grid size-11 place-items-center rounded-2xl bg-violet-200 text-violet-950 shadow-sm">
               <Sparkles aria-hidden="true" className="size-6" />
             </span>
             <span>Eguchi Pitch Club</span>

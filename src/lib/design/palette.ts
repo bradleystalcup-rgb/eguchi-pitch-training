@@ -1,0 +1,32 @@
+export const sitePalette = {
+  primary: "#c4b5fd",
+  primaryStrong: "#8b5cf6",
+  primarySoft: "#ede9fe",
+  primaryInk: "#4c1d95",
+  secondary: "#fbcfe8",
+  secondaryStrong: "#ec4899",
+  accent: "#fde68a",
+  success: "#86efac",
+  danger: "#fca5a5",
+  surface: "#fff7ed",
+  surfaceCool: "#f5f3ff",
+  ink: "#1e1b4b",
+} as const;
+
+export const chordPalette = {
+  red: "#ef4444",
+  yellow: "#facc15",
+  blue: "#2563eb",
+  black: "#111827",
+  green: "#16a34a",
+  orange: "#f97316",
+  purple: "#9333ea",
+  pink: "#ec4899",
+  brown: "#92400e",
+  white: "#f8fafc",
+  cSharp: "#e0f2fe",
+  dSharp: "#fef3c7",
+  fSharp: "#dcfce7",
+  gSharp: "#fce7f3",
+  aSharp: "#ede9fe",
+} as const;

@@ -1,4 +1,5 @@
 import { DEFAULT_CHORD_DEFINITIONS } from "./chords";
+import { chordPalette } from "@/lib/design/palette";
 import type {
   ProgressionDecision,
   ProtocolChord,
@@ -59,20 +60,20 @@ const chordPresentation: Record<
   string,
   Pick<ProtocolChord, "answerLabel" | "colorName" | "colorHex" | "textClass" | "colorAddKey" | "phase">
 > = {
-  "white-red-ceg": color("Red", "#ef4444", "text-white", "red"),
-  "white-yellow-cfa": color("Yellow", "#facc15", "text-slate-950", "yellow"),
-  "white-blue-bdg": color("Blue", "#2563eb", "text-white", "blue"),
-  "white-black-acf": color("Black", "#111827", "text-white", "black"),
-  "white-green-dgb": color("Green", "#16a34a", "text-white", "blue+yellow"),
-  "white-orange-egc": color("Orange", "#f97316", "text-white", "red+yellow"),
-  "white-purple-fac": color("Purple", "#9333ea", "text-white", "blue+red"),
-  "white-pink-gbd": color("Pink", "#ec4899", "text-white", "red+white"),
-  "white-brown-gce": color("Brown", "#92400e", "text-white", "red+yellow+black"),
-  "black-csharp-major": toneName("C sharp"),
-  "black-dsharp-major": toneName("D sharp"),
-  "black-fsharp-major": toneName("F sharp"),
-  "black-gsharp-major": toneName("G sharp"),
-  "black-asharp-major": toneName("A sharp"),
+  "white-red-ceg": color("Red", chordPalette.red, "text-white", "red"),
+  "white-yellow-cfa": color("Yellow", chordPalette.yellow, "text-slate-950", "yellow"),
+  "white-blue-bdg": color("Blue", chordPalette.blue, "text-white", "blue"),
+  "white-black-acf": color("Black", chordPalette.black, "text-white", "black"),
+  "white-green-dgb": color("Green", chordPalette.green, "text-white", "blue+yellow"),
+  "white-orange-egc": color("Orange", chordPalette.orange, "text-white", "red+yellow"),
+  "white-purple-fac": color("Purple", chordPalette.purple, "text-white", "blue+red"),
+  "white-pink-gbd": color("Pink", chordPalette.pink, "text-white", "red+white"),
+  "white-brown-gce": color("Brown", chordPalette.brown, "text-white", "red+yellow+black"),
+  "black-csharp-major": toneName("C sharp", chordPalette.cSharp),
+  "black-dsharp-major": toneName("D sharp", chordPalette.dSharp),
+  "black-fsharp-major": toneName("F sharp", chordPalette.fSharp),
+  "black-gsharp-major": toneName("G sharp", chordPalette.gSharp),
+  "black-asharp-major": toneName("A sharp", chordPalette.aSharp),
 };
 
 const pitchNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -88,11 +89,11 @@ function color(answerLabel: string, colorHex: string, textClass: string, colorAd
   };
 }
 
-function toneName(answerLabel: string) {
+function toneName(answerLabel: string, colorHex: string) {
   return {
     answerLabel,
     colorName: "White",
-    colorHex: "#f8fafc",
+    colorHex,
     textClass: "text-slate-950",
     colorAddKey: "white",
     phase: "black-keys" as const,

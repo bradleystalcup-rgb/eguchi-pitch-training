@@ -12,9 +12,9 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "bg-emerald-500 text-white shadow-[0_8px_0_#047857] hover:bg-emerald-400 active:translate-y-1 active:shadow-[0_4px_0_#047857]",
+    "bg-violet-400 text-violet-950 shadow-[0_8px_0_#8b5cf6] hover:bg-violet-300 active:translate-y-1 active:shadow-[0_4px_0_#8b5cf6]",
   secondary:
-    "bg-amber-300 text-amber-950 shadow-[0_8px_0_#d97706] hover:bg-amber-200 active:translate-y-1 active:shadow-[0_4px_0_#d97706]",
+    "bg-pink-200 text-pink-950 shadow-[0_8px_0_#ec4899] hover:bg-pink-100 active:translate-y-1 active:shadow-[0_4px_0_#ec4899]",
   ghost:
     "bg-white/70 text-slate-700 ring-2 ring-slate-200 hover:bg-white hover:ring-slate-300",
   answer:
@@ -38,7 +38,7 @@ export function buttonVariants({
   className?: string;
 } = {}) {
   return cn(
-    "inline-flex items-center justify-center gap-2 rounded-2xl font-black tracking-normal transition duration-150 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-sky-300 disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-55 disabled:shadow-none",
+    "inline-flex items-center justify-center gap-2 rounded-2xl font-black tracking-normal transition duration-150 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-violet-300 disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-55 disabled:shadow-none",
     variants[variant],
     sizes[size],
     className,
