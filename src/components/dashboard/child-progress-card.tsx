@@ -36,25 +36,25 @@ function DailySessionRing({
   const isComplete = day.count >= goal;
 
   return (
-    <div className={["relative text-center", isToday ? "w-20" : "w-14"].join(" ")}>
+    <div className={["relative shrink-0 text-center", isToday ? "w-16" : "w-12"].join(" ")}>
       <div
         className={[
-          "relative grid place-items-center rounded-full bg-slate-100 shadow-inner",
-          isToday ? "size-20" : "size-14",
+          "relative grid place-items-center rounded-full bg-slate-100 shadow-inner ring-1 ring-white",
+          isToday ? "size-16" : "size-12",
         ].join(" ")}
         style={{ background: `conic-gradient(#10b981 ${percent}%, #e2e8f0 0)` }}
         aria-label={`${dayLabel(day.date)}: ${day.count} of ${goal} sessions`}
       >
-        <div className={["grid place-items-center rounded-full bg-white font-black text-slate-950", isToday ? "size-14 text-base" : "size-10 text-sm"].join(" ")}>
+        <div className={["grid place-items-center rounded-full bg-white font-black text-slate-950", isToday ? "size-11 text-sm" : "size-8 text-xs"].join(" ")}>
           {isToday ? `${day.count}/${goal}` : day.count}
         </div>
       </div>
       {isComplete ? (
-        <span className="absolute -right-1 -top-1 grid size-6 place-items-center rounded-full bg-amber-300 text-amber-950 ring-2 ring-white">
-          <Star className="size-3.5 fill-current" aria-hidden="true" />
+        <span className="absolute -right-0.5 -top-0.5 grid size-5 place-items-center rounded-full bg-amber-300 text-amber-950 ring-2 ring-white">
+          <Star className="size-3 fill-current" aria-hidden="true" />
         </span>
       ) : null}
-      <div className="mt-2 text-xs font-black uppercase text-slate-500">{dayLabel(day.date)}</div>
+      <div className="mt-1.5 text-[10px] font-black uppercase leading-none text-slate-500">{dayLabel(day.date)}</div>
     </div>
   );
 }
@@ -84,8 +84,8 @@ export function ChildProgressCard({
         </div>
       </CardHeader>
 
-      <div className="rounded-3xl bg-white/75 p-4 ring-2 ring-white">
-        <div className="flex items-end justify-between gap-3 overflow-x-auto pb-1">
+      <div className="rounded-2xl bg-white/75 p-3 ring-2 ring-white">
+        <div className="flex items-end justify-between gap-1.5">
           {days.map((day, index) => (
             <DailySessionRing
               key={day.date}
