@@ -37,6 +37,8 @@ export async function GET(
         birthYear: child.birthYear,
         level: child.currentLevel,
         currentLevel: child.currentLevel,
+        dailySessionGoal: child.dailySessionGoal,
+        dailySessionCounts: child.dailySessionCounts,
         showColorAccessibilityKeys: child.showColorAccessibilityKeys,
         warmUpChordsEnabled: child.warmUpChordsEnabled,
         autoNextEnabled: child.autoNextEnabled,
@@ -89,6 +91,7 @@ export async function PATCH(
   const accidentalMode = (payload as Record<string, unknown>).accidentalMode;
   const chordSelectionAlgorithm = (payload as Record<string, unknown>).chordSelectionAlgorithm;
   const soundEngine = (payload as Record<string, unknown>).soundEngine;
+  const dailySessionGoal = (payload as Record<string, unknown>).dailySessionGoal;
 
   if (showColorAccessibilityKeys !== undefined && typeof showColorAccessibilityKeys !== "boolean") {
     return errorResponse("bad_request", "showColorAccessibilityKeys must be a boolean.", 400);
@@ -108,9 +111,20 @@ export async function PATCH(
       hotkeyMode === undefined &&
       accidentalMode === undefined &&
       chordSelectionAlgorithm === undefined &&
-      soundEngine === undefined
+      soundEngine === undefined &&
+      dailySessionGoal === undefined
     ) {
       return errorResponse("bad_request", "At least one child setting is required.", 400);
+    }
+  }
+  if (dailySessionGoal !== undefined) {
+    if (
+      !Number.isInteger(dailySessionGoal) ||
+      typeof dailySessionGoal !== "number" ||
+      dailySessionGoal < 1 ||
+      dailySessionGoal > 12
+    ) {
+      return errorResponse("bad_request", "dailySessionGoal must be an integer between 1 and 12.", 400);
     }
   }
   if (autoNextEnabled !== undefined && typeof autoNextEnabled !== "boolean") {
@@ -140,6 +154,7 @@ export async function PATCH(
           ? warmUpChordsEnabled
           : undefined,
       autoNextEnabled: typeof autoNextEnabled === "boolean" ? autoNextEnabled : undefined,
+      dailySessionGoal: typeof dailySessionGoal === "number" ? dailySessionGoal : undefined,
       hotkeyMode: typeof hotkeyMode === "string" ? hotkeyMode : undefined,
       accidentalMode: typeof accidentalMode === "string" ? accidentalMode : undefined,
       chordSelectionAlgorithm: typeof chordSelectionAlgorithm === "string" ? chordSelectionAlgorithm : undefined,
@@ -158,6 +173,8 @@ export async function PATCH(
         birthYear: child.birthYear,
         level: child.currentLevel,
         currentLevel: child.currentLevel,
+        dailySessionGoal: child.dailySessionGoal,
+        dailySessionCounts: child.dailySessionCounts,
         showColorAccessibilityKeys: child.showColorAccessibilityKeys,
         warmUpChordsEnabled: child.warmUpChordsEnabled,
         autoNextEnabled: child.autoNextEnabled,

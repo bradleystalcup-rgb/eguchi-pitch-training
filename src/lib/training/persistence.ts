@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -37,6 +37,7 @@ export type ChildProfileSummary = {
   displayName: string;
   birthYear: number | null;
   currentLevel: number;
+  dailySessionGoal: number;
   showColorAccessibilityKeys: boolean;
   warmUpChordsEnabled: boolean | null;
   autoNextEnabled: boolean;
@@ -44,7 +45,13 @@ export type ChildProfileSummary = {
   accidentalMode: string;
   chordSelectionAlgorithm: string;
   soundEngine: string;
+  dailySessionCounts: DailySessionCount[];
   progress: ProgressSnapshot;
+};
+
+export type DailySessionCount = {
+  date: string;
+  count: number;
 };
 
 export type SessionChordStat = {
@@ -348,6 +355,7 @@ function toChildSummary(row: {
   displayName: string;
   birthYear: number | null;
   currentLevel: number;
+  dailySessionGoal: number;
   showColorAccessibilityKeys: boolean;
   warmUpChordsEnabled: boolean | null;
   autoNextEnabled: boolean;
@@ -366,6 +374,7 @@ function toChildSummary(row: {
     displayName: row.displayName,
     birthYear: row.birthYear,
     currentLevel: row.currentLevel,
+    dailySessionGoal: row.dailySessionGoal,
     showColorAccessibilityKeys: row.showColorAccessibilityKeys,
     warmUpChordsEnabled: row.warmUpChordsEnabled,
     autoNextEnabled: row.autoNextEnabled,
@@ -373,6 +382,7 @@ function toChildSummary(row: {
     accidentalMode: row.accidentalMode,
     chordSelectionAlgorithm: row.chordSelectionAlgorithm,
     soundEngine: row.soundEngine,
+    dailySessionCounts: [],
     progress: {
       currentLevel: row.currentLevel,
       trainingPhase: row.trainingPhase ?? "chord_identification",
@@ -382,6 +392,58 @@ function toChildSummary(row: {
       recentAccuracy: row.recentAccuracy ?? 0,
     },
   };
+}
+
+function dateKeyUtc(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function createEmptyDailySessionCounts() {
+  const today = new Date();
+  const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - 6 * 86_400_000;
+
+  return Array.from({ length: 7 }, (_, index) => ({
+    date: dateKeyUtc(new Date(start + index * 86_400_000)),
+    count: 0,
+  }));
+}
+
+async function getDailySessionCountsForChildren(parentUserId: string, childProfileIds: string[]) {
+  const countsByChild = new Map<string, DailySessionCount[]>();
+
+  for (const childProfileId of childProfileIds) {
+    countsByChild.set(childProfileId, createEmptyDailySessionCounts());
+  }
+
+  if (!childProfileIds.length) return countsByChild;
+
+  const days = createEmptyDailySessionCounts();
+  const firstDay = new Date(`${days[0].date}T00:00:00.000Z`);
+  const dayExpression = sql<string>`to_char(${trainingSessions.completedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`;
+  const rows = await db
+    .select({
+      childProfileId: trainingSessions.childProfileId,
+      date: dayExpression,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(trainingSessions)
+    .where(
+      and(
+        eq(trainingSessions.parentUserId, parentUserId),
+        eq(trainingSessions.status, "completed"),
+        inArray(trainingSessions.childProfileId, childProfileIds),
+        sql`${trainingSessions.completedAt} >= ${firstDay}`,
+      ),
+    )
+    .groupBy(trainingSessions.childProfileId, dayExpression);
+
+  for (const row of rows) {
+    const childCounts = countsByChild.get(row.childProfileId);
+    const day = childCounts?.find((item) => item.date === row.date);
+    if (day) day.count = row.count;
+  }
+
+  return countsByChild;
 }
 
 export async function ensureDefaultChordDefinitions() {
@@ -396,6 +458,7 @@ export async function createChildProfile(input: {
   displayName: string;
   birthYear?: number | null;
   level?: number;
+  dailySessionGoal?: number;
 }) {
   const id = crypto.randomUUID();
   const now = new Date();
@@ -409,6 +472,7 @@ export async function createChildProfile(input: {
       displayName: input.displayName,
       birthYear: input.birthYear ?? null,
       currentLevel: level,
+      dailySessionGoal: input.dailySessionGoal ?? 5,
       createdAt: now,
       updatedAt: now,
     })
@@ -434,6 +498,7 @@ export async function listChildProfilesForParent(parentUserId: string): Promise<
       displayName: childProfiles.displayName,
       birthYear: childProfiles.birthYear,
       currentLevel: childProfiles.currentLevel,
+      dailySessionGoal: childProfiles.dailySessionGoal,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
       warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
       autoNextEnabled: childProfiles.autoNextEnabled,
@@ -455,7 +520,16 @@ export async function listChildProfilesForParent(parentUserId: string): Promise<
     .where(eq(childProfiles.parentUserId, parentUserId))
     .orderBy(childProfiles.createdAt);
 
-  return rows.map(toChildSummary);
+  const children = rows.map(toChildSummary);
+  const dailyCountsByChild = await getDailySessionCountsForChildren(
+    parentUserId,
+    children.map((child) => child.id),
+  );
+
+  return children.map((child) => ({
+    ...child,
+    dailySessionCounts: dailyCountsByChild.get(child.id) ?? createEmptyDailySessionCounts(),
+  }));
 }
 
 export async function getChildProfileForParent(
@@ -468,6 +542,7 @@ export async function getChildProfileForParent(
       displayName: childProfiles.displayName,
       birthYear: childProfiles.birthYear,
       currentLevel: childProfiles.currentLevel,
+      dailySessionGoal: childProfiles.dailySessionGoal,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
       warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
       autoNextEnabled: childProfiles.autoNextEnabled,
@@ -489,7 +564,15 @@ export async function getChildProfileForParent(
     .where(and(eq(childProfiles.id, childProfileId), eq(childProfiles.parentUserId, parentUserId)))
     .limit(1);
 
-  return row ? toChildSummary(row) : null;
+  if (!row) return null;
+
+  const child = toChildSummary(row);
+  const dailyCountsByChild = await getDailySessionCountsForChildren(parentUserId, [child.id]);
+
+  return {
+    ...child,
+    dailySessionCounts: dailyCountsByChild.get(child.id) ?? createEmptyDailySessionCounts(),
+  };
 }
 
 export async function updateChildLevelForParent(input: {
@@ -518,6 +601,7 @@ export async function updateChildLevelForParent(input: {
         displayName: childProfiles.displayName,
         birthYear: childProfiles.birthYear,
         currentLevel: childProfiles.currentLevel,
+        dailySessionGoal: childProfiles.dailySessionGoal,
         showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
         warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
         autoNextEnabled: childProfiles.autoNextEnabled,
@@ -557,6 +641,7 @@ export async function updateChildLevelForParent(input: {
       ...profile,
       showColorAccessibilityKeys: profile.showColorAccessibilityKeys,
       warmUpChordsEnabled: profile.warmUpChordsEnabled,
+      dailySessionGoal: profile.dailySessionGoal,
       autoNextEnabled: profile.autoNextEnabled,
       hotkeyMode: profile.hotkeyMode,
       accidentalMode: profile.accidentalMode,
@@ -578,6 +663,7 @@ export async function updateChildPracticeSettingsForParent(input: {
   childProfileId: string;
   showColorAccessibilityKeys?: boolean;
   warmUpChordsEnabled?: boolean | null;
+  dailySessionGoal?: number;
   autoNextEnabled?: boolean;
   hotkeyMode?: string;
   accidentalMode?: string;
@@ -588,6 +674,7 @@ export async function updateChildPracticeSettingsForParent(input: {
   const settings: {
     showColorAccessibilityKeys?: boolean;
     warmUpChordsEnabled?: boolean | null;
+    dailySessionGoal?: number;
     autoNextEnabled?: boolean;
     hotkeyMode?: string;
     accidentalMode?: string;
@@ -603,6 +690,7 @@ export async function updateChildPracticeSettingsForParent(input: {
   if (input.warmUpChordsEnabled !== undefined) {
     settings.warmUpChordsEnabled = input.warmUpChordsEnabled;
   }
+  if (input.dailySessionGoal !== undefined) settings.dailySessionGoal = input.dailySessionGoal;
   if (input.autoNextEnabled !== undefined) settings.autoNextEnabled = input.autoNextEnabled;
   if (input.hotkeyMode !== undefined) settings.hotkeyMode = input.hotkeyMode;
   if (input.accidentalMode !== undefined) settings.accidentalMode = input.accidentalMode;
@@ -623,6 +711,7 @@ export async function updateChildPracticeSettingsForParent(input: {
       displayName: childProfiles.displayName,
       birthYear: childProfiles.birthYear,
       currentLevel: childProfiles.currentLevel,
+      dailySessionGoal: childProfiles.dailySessionGoal,
       showColorAccessibilityKeys: childProfiles.showColorAccessibilityKeys,
       warmUpChordsEnabled: childProfiles.warmUpChordsEnabled,
       autoNextEnabled: childProfiles.autoNextEnabled,
@@ -638,6 +727,7 @@ export async function updateChildPracticeSettingsForParent(input: {
 
   return {
     ...profile,
+    dailySessionCounts: createEmptyDailySessionCounts(),
     progress,
   };
 }

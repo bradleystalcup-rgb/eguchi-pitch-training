@@ -34,7 +34,7 @@ export function validateChildId(childId: string) {
 }
 
 export function validateCreateChildPayload(payload: unknown):
-  | { ok: true; value: { displayName: string; birthYear?: number | null; level?: number } }
+  | { ok: true; value: { displayName: string; birthYear?: number | null; level?: number; dailySessionGoal?: number } }
   | { ok: false; message: string } {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
     return { ok: false, message: "Request body must be a JSON object." };
@@ -57,6 +57,7 @@ export function validateCreateChildPayload(payload: unknown):
   }
 
   const level = body.level ?? body.currentLevel;
+  const dailySessionGoal = body.dailySessionGoal;
 
   if (level !== undefined && level !== null) {
     if (!Number.isInteger(level) || typeof level !== "number" || level < 1 || level > 15) {
@@ -64,8 +65,27 @@ export function validateCreateChildPayload(payload: unknown):
     }
   }
 
+  if (dailySessionGoal !== undefined && dailySessionGoal !== null) {
+    if (
+      !Number.isInteger(dailySessionGoal) ||
+      typeof dailySessionGoal !== "number" ||
+      dailySessionGoal < 1 ||
+      dailySessionGoal > 12
+    ) {
+      return { ok: false, message: "dailySessionGoal must be an integer between 1 and 12." };
+    }
+  }
+
   if (body.birthYear === undefined || body.birthYear === null) {
-    return { ok: true, value: { displayName, birthYear: null, level: typeof level === "number" ? level : undefined } };
+    return {
+      ok: true,
+      value: {
+        displayName,
+        birthYear: null,
+        level: typeof level === "number" ? level : undefined,
+        dailySessionGoal: typeof dailySessionGoal === "number" ? dailySessionGoal : undefined,
+      },
+    };
   }
 
   const birthYear = body.birthYear;
@@ -80,5 +100,13 @@ export function validateCreateChildPayload(payload: unknown):
     return { ok: false, message: `birthYear must be between 1900 and ${currentYear}.` };
   }
 
-  return { ok: true, value: { displayName, birthYear, level: typeof level === "number" ? level : undefined } };
+  return {
+    ok: true,
+    value: {
+      displayName,
+      birthYear,
+      level: typeof level === "number" ? level : undefined,
+      dailySessionGoal: typeof dailySessionGoal === "number" ? dailySessionGoal : undefined,
+    },
+  };
 }

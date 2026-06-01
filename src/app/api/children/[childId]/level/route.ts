@@ -58,6 +58,8 @@ export async function PATCH(
         birthYear: child.birthYear,
         level: child.currentLevel,
         currentLevel: child.currentLevel,
+        dailySessionGoal: child.dailySessionGoal,
+        dailySessionCounts: child.dailySessionCounts,
         showColorAccessibilityKeys: child.showColorAccessibilityKeys,
         warmUpChordsEnabled: child.warmUpChordsEnabled,
         autoNextEnabled: child.autoNextEnabled,

@@ -18,6 +18,8 @@ function childResponse(child: ChildProfileSummary) {
     birthYear: child.birthYear,
     level: child.currentLevel,
     currentLevel: child.currentLevel,
+    dailySessionGoal: child.dailySessionGoal,
+    dailySessionCounts: child.dailySessionCounts,
     showColorAccessibilityKeys: child.showColorAccessibilityKeys,
     warmUpChordsEnabled: child.warmUpChordsEnabled,
     autoNextEnabled: child.autoNextEnabled,
@@ -27,6 +29,16 @@ function childResponse(child: ChildProfileSummary) {
     soundEngine: child.soundEngine,
     progress: child.progress,
   };
+}
+
+function createEmptyDailySessionCounts() {
+  const today = new Date();
+  const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - 6 * 86_400_000;
+
+  return Array.from({ length: 7 }, (_, index) => ({
+    date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+    count: 0,
+  }));
 }
 
 export async function GET() {
@@ -72,6 +84,7 @@ export async function POST(request: Request) {
       displayName: validation.value.displayName,
       birthYear: validation.value.birthYear,
       level: validation.value.level,
+      dailySessionGoal: validation.value.dailySessionGoal,
     });
 
     return Response.json(
@@ -81,6 +94,8 @@ export async function POST(request: Request) {
           displayName: child.displayName,
           birthYear: child.birthYear,
           currentLevel: child.currentLevel,
+          dailySessionGoal: child.dailySessionGoal,
+          dailySessionCounts: createEmptyDailySessionCounts(),
           showColorAccessibilityKeys: child.showColorAccessibilityKeys,
           warmUpChordsEnabled: child.warmUpChordsEnabled,
           autoNextEnabled: child.autoNextEnabled,

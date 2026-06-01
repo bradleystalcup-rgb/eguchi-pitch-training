@@ -17,6 +17,8 @@ export type ChildSummary = {
   birthYear?: number | null;
   level?: number | string | null;
   currentLevel?: number | string | null;
+  dailySessionGoal?: number | null;
+  dailySessionCounts?: { date: string; count: number }[];
   sessionsThisWeek?: number | null;
   progress?: {
     currentLevel?: number | null;
@@ -36,6 +38,7 @@ export function ChildrenDashboard() {
   const [name, setName] = useState("");
   const [birthYear, setBirthYear] = useState("");
   const [startingLevel, setStartingLevel] = useState(1);
+  const [dailySessionGoal, setDailySessionGoal] = useState(5);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -97,6 +100,7 @@ export function ChildrenDashboard() {
         body: JSON.stringify({
           displayName: childName,
           level: startingLevel,
+          dailySessionGoal,
           ...(trimmedBirthYear ? { birthYear: Number(trimmedBirthYear) } : {}),
         }),
       });
@@ -111,6 +115,7 @@ export function ChildrenDashboard() {
       setName("");
       setBirthYear("");
       setStartingLevel(1);
+      setDailySessionGoal(5);
       setIsCreateOpen(false);
     } catch (caughtError) {
       setFormError(caughtError instanceof Error ? caughtError.message : "We could not add that child. Try again.");
@@ -155,10 +160,14 @@ export function ChildrenDashboard() {
               <Label htmlFor="child-birth-year">Birth year</Label>
               <Input
                 id="child-birth-year"
+                type="number"
                 value={birthYear}
-                onChange={(event) => setBirthYear(event.target.value)}
+                onChange={(event) => setBirthYear(event.target.value.replace(/\D/g, "").slice(0, 4))}
                 inputMode="numeric"
                 pattern="[0-9]{4}"
+                min={1900}
+                max={new Date().getUTCFullYear()}
+                step={1}
                 aria-invalid={Boolean(formError)}
                 aria-describedby={formError ? "child-name-error" : undefined}
                 className="mt-2 min-h-12"
@@ -179,6 +188,24 @@ export function ChildrenDashboard() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <Label htmlFor="child-daily-session-goal">Daily session goal</Label>
+            <Input
+              id="child-daily-session-goal"
+              type="number"
+              value={dailySessionGoal}
+              onChange={(event) => setDailySessionGoal(Math.min(12, Math.max(1, Number(event.target.value) || 1)))}
+              inputMode="numeric"
+              min={1}
+              max={12}
+              step={1}
+              className="mt-2 min-h-12"
+            />
+            <p className="mt-2 text-xs font-bold text-slate-500">
+              * The method works best with at least 4 or 5 short sessions each day.
+            </p>
           </div>
 
           {formError ? (
@@ -257,7 +284,8 @@ function ChildCard({ child }: { child: ChildSummary }) {
       id={child.id}
       name={childName}
       level={levelLabel}
-      sessionsCompleted={child.sessionsThisWeek ?? child.progress?.sessionsCompleted ?? 0}
+      dailySessionGoal={child.dailySessionGoal ?? 5}
+      dailySessionCounts={child.dailySessionCounts ?? createEmptyDailySessionCounts()}
       actionMode="links"
     />
   );
@@ -272,8 +300,20 @@ function normalizeChild(child: ChildSummary): ChildSummary {
     displayName: child.displayName ?? child.name ?? "Learner",
     level,
     currentLevel: level,
+    dailySessionGoal: child.dailySessionGoal ?? 5,
+    dailySessionCounts: child.dailySessionCounts ?? createEmptyDailySessionCounts(),
     sessionsThisWeek: child.sessionsThisWeek ?? child.progress?.sessionsCompleted ?? 0,
   };
+}
+
+function createEmptyDailySessionCounts() {
+  const today = new Date();
+  const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - 6 * 86_400_000;
+
+  return Array.from({ length: 7 }, (_, index) => ({
+    date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+    count: 0,
+  }));
 }
 
 function formatLevel(level: number | string | null | undefined) {

@@ -21,6 +21,8 @@ type ChildDetailData = {
   weeklyGoalPercent?: number | null;
   sessionsThisWeek?: number | null;
   favoriteSkill?: string | null;
+  dailySessionGoal?: number | null;
+  dailySessionCounts?: { date: string; count: number }[];
   showColorAccessibilityKeys?: boolean | null;
   warmUpChordsEnabled?: boolean | null;
   autoNextEnabled?: boolean | null;
@@ -89,7 +91,8 @@ export function ChildDetail({ childId }: { childId: string }) {
           : typeof child.level === "number"
           ? `Level ${child.level}`
           : child.level,
-      sessionsCompleted: child.sessionsThisWeek ?? child.progress?.sessionsCompleted ?? 0,
+      dailySessionGoal: child.dailySessionGoal ?? 5,
+      dailySessionCounts: child.dailySessionCounts ?? createEmptyDailySessionCounts(),
     };
   }, [child]);
 
@@ -415,6 +418,8 @@ function normalizeChild(child: ChildDetailData | undefined): ChildDetailData | u
     level: child.level ?? child.currentLevel ?? child.progress?.currentLevel ?? 1,
     weeklyGoalPercent: child.weeklyGoalPercent ?? child.progress?.recentAccuracy ?? 0,
     sessionsThisWeek: child.sessionsThisWeek ?? child.progress?.sessionsCompleted ?? 0,
+    dailySessionGoal: child.dailySessionGoal ?? 5,
+    dailySessionCounts: child.dailySessionCounts ?? createEmptyDailySessionCounts(),
     showColorAccessibilityKeys: Boolean(child.showColorAccessibilityKeys),
     warmUpChordsEnabled: child.warmUpChordsEnabled ?? null,
     autoNextEnabled: Boolean(child.autoNextEnabled),
@@ -423,6 +428,16 @@ function normalizeChild(child: ChildDetailData | undefined): ChildDetailData | u
     chordSelectionAlgorithm: child.chordSelectionAlgorithm ?? "random",
     soundEngine: child.soundEngine ?? "tone",
   };
+}
+
+function createEmptyDailySessionCounts() {
+  const today = new Date();
+  const start = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - 6 * 86_400_000;
+
+  return Array.from({ length: 7 }, (_, index) => ({
+    date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+    count: 0,
+  }));
 }
 
 function readChildDetail(data: ChildDetailResponse): ChildDetailData | undefined {

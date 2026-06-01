@@ -95,6 +95,7 @@ export const childProfiles = pgTable(
     displayName: text("display_name").notNull(),
     birthYear: integer("birth_year"),
     currentLevel: integer("current_level").notNull().default(1),
+    dailySessionGoal: integer("daily_session_goal").notNull().default(5),
     showColorAccessibilityKeys: boolean("show_color_accessibility_keys").notNull().default(false),
     warmUpChordsEnabled: boolean("warm_up_chords_enabled"),
     autoNextEnabled: boolean("auto_next_enabled").notNull().default(false),
@@ -114,6 +115,10 @@ export const childProfiles = pgTable(
     currentLevelRange: check(
       "child_profiles_current_level_between_1_and_15",
       sql`${table.currentLevel} BETWEEN 1 AND 15`,
+    ),
+    dailySessionGoalRange: check(
+      "child_profiles_daily_session_goal_between_1_and_12",
+      sql`${table.dailySessionGoal} BETWEEN 1 AND 12`,
     ),
   }),
 );

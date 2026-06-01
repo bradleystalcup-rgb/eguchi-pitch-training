@@ -88,3 +88,11 @@ Adds per-child defaults for practice room controls.
 
 - Auto-next, hotkey side, note-name display, chord selection algorithm, and sound engine now persist with the learner profile.
 - The learner settings modal and practice drawer can edit the same settings.
+
+## 0011_child_daily_session_goal.sql
+
+Adds a per-child daily session goal.
+
+- Defaults each learner to 5 sessions per day.
+- Adds a CHECK constraint allowing 1-12 sessions per day.
+- Dashboard cards use this target to render recent daily completion progress.
