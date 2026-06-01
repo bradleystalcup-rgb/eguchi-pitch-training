@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   childChordReviewState,
+  childLevelMasteryState,
   childProfiles,
   childTrainingProgress,
   chordDefinitions,
@@ -12,7 +13,6 @@ import {
 import { DEFAULT_CHORD_DEFINITIONS } from "./chords";
 import {
   DEFAULT_PROTOCOL_VERSION,
-  calculateProgression,
   getActiveChordsForLevel,
   getProtocolLevel,
 } from "./protocol";
@@ -25,6 +25,7 @@ import {
 import type {
   ChordSelectionAlgorithm,
   ProgressSnapshot,
+  ProgressionDecision,
   ProtocolChord,
   SkillMapSnapshot,
   TrainingTaskType,
@@ -232,48 +233,72 @@ function findNextLockedChord(currentLevel: number, currentChordSlugs: Set<string
   return null;
 }
 
+async function getLevelPerfectSessionStreak(childProfileId: string, level: number) {
+  const [state] = await db
+    .select({
+      perfectSessionStreak: childLevelMasteryState.perfectSessionStreak,
+    })
+    .from(childLevelMasteryState)
+    .where(
+      and(
+        eq(childLevelMasteryState.childProfileId, childProfileId),
+        eq(childLevelMasteryState.level, level),
+      ),
+    )
+    .limit(1);
+
+  return state?.perfectSessionStreak ?? 0;
+}
+
+async function updateLevelPerfectSessionStreak(input: {
+  childProfileId: string;
+  level: number;
+  sessionId: string;
+  isPerfect: boolean;
+}) {
+  const now = new Date();
+  const [existing] = await db
+    .select()
+    .from(childLevelMasteryState)
+    .where(
+      and(
+        eq(childLevelMasteryState.childProfileId, input.childProfileId),
+        eq(childLevelMasteryState.level, input.level),
+      ),
+    )
+    .limit(1);
+  const nextStreak = input.isPerfect ? (existing?.perfectSessionStreak ?? 0) + 1 : 0;
+
+  if (existing) {
+    await db
+      .update(childLevelMasteryState)
+      .set({
+        perfectSessionStreak: nextStreak,
+        lastSessionId: input.sessionId,
+        updatedAt: now,
+      })
+      .where(eq(childLevelMasteryState.id, existing.id));
+    return nextStreak;
+  }
+
+  await db.insert(childLevelMasteryState).values({
+    id: crypto.randomUUID(),
+    childProfileId: input.childProfileId,
+    level: input.level,
+    perfectSessionStreak: nextStreak,
+    lastSessionId: input.sessionId,
+    updatedAt: now,
+  });
+
+  return nextStreak;
+}
+
 async function getSkillMapSnapshot(childProfileId: string, currentLevel: number): Promise<SkillMapSnapshot> {
   const activeChords = getActiveChordsForLevel(currentLevel);
   const activeChordSlugs = new Set(activeChords.map((chord) => chord.slug));
   const currentChord = activeChords[activeChords.length - 1];
   const masteredChords = activeChords.slice(0, -1);
-  const currentChordSlugs = new Set(currentChord ? [currentChord.slug] : []);
-  const streaks = new Map(currentChord ? [[currentChord.slug, 0]] : []);
-  const blocked = new Set<string>();
-
-  const sessions = await db
-    .select({
-      startedAt: trainingSessions.startedAt,
-      completedAt: trainingSessions.completedAt,
-      totalTrials: trainingSessions.totalTrials,
-      correctTrials: trainingSessions.correctTrials,
-      trialPlan: trainingSessions.trialPlan,
-    })
-    .from(trainingSessions)
-    .where(
-      and(
-        eq(trainingSessions.childProfileId, childProfileId),
-        eq(trainingSessions.status, "completed"),
-      ),
-    )
-    .orderBy(desc(trainingSessions.completedAt), desc(trainingSessions.startedAt));
-
-  for (const session of sessions) {
-    if (!currentChord || blocked.size === currentChordSlugs.size) break;
-
-    const sessionChordSlugs = new Set(session.trialPlan.map((trial) => trial.promptChordSlug));
-    const isPerfect = session.totalTrials > 0 && session.correctTrials >= session.totalTrials;
-
-    for (const chordSlug of currentChordSlugs) {
-      if (blocked.has(chordSlug) || !sessionChordSlugs.has(chordSlug)) continue;
-
-      if (isPerfect) {
-        streaks.set(chordSlug, (streaks.get(chordSlug) ?? 0) + 1);
-      } else {
-        blocked.add(chordSlug);
-      }
-    }
-  }
+  const currentStreak = await getLevelPerfectSessionStreak(childProfileId, currentLevel);
 
   const mastered = masteredChords.map((chord) =>
     skillMapRow({
@@ -286,7 +311,7 @@ async function getSkillMapSnapshot(childProfileId: string, currentLevel: number)
     ? [
         skillMapRow({
           chord: currentChord,
-          streak: streaks.get(currentChord.slug) ?? 0,
+          streak: currentStreak,
           status: "current",
         }),
       ]
@@ -1102,12 +1127,36 @@ export async function completeTrainingSession(input: {
   recentResults: readonly TrialResult[];
 }) {
   const snapshot = await getProgressSnapshot(input.childProfileId);
-  const decision = calculateProgression(
-    snapshot.currentLevel,
-    input.trainingPhase,
-    input.recentResults,
-  );
   const correctTrials = input.recentResults.filter((result) => result.isCorrect).length;
+  const protocolLevel = getProtocolLevel(snapshot.currentLevel);
+  const recentAccuracy = input.recentResults.length
+    ? Math.round((correctTrials / input.recentResults.length) * 100)
+    : 0;
+  const isPerfect =
+    input.recentResults.length >= protocolLevel.trialsPerSession &&
+    input.recentResults.every((result) => result.isCorrect);
+  const perfectSessionStreak = await updateLevelPerfectSessionStreak({
+    childProfileId: input.childProfileId,
+    level: snapshot.currentLevel,
+    sessionId: input.sessionId,
+    isPerfect,
+  });
+  const isFinalLevel = snapshot.currentLevel >= MAX_LEARNER_LEVEL;
+  const promoted =
+    input.trainingPhase === "chord_identification" &&
+    !isFinalLevel &&
+    perfectSessionStreak >= REQUIRED_PERFECT_SESSION_STREAK;
+  const phasePromoted =
+    input.trainingPhase === "chord_identification" &&
+    isFinalLevel &&
+    isPerfect;
+  const decision = {
+    nextLevel: promoted ? snapshot.currentLevel + 1 : snapshot.currentLevel,
+    nextTrainingPhase: phasePromoted ? "chord_notes" : input.trainingPhase,
+    recentAccuracy,
+    promoted,
+    phasePromoted,
+  } satisfies ProgressionDecision;
   const now = new Date();
 
   await db

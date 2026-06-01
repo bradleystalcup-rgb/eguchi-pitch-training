@@ -96,3 +96,10 @@ Adds a per-child daily session goal.
 - Defaults each learner to 5 sessions per day.
 - Adds a CHECK constraint allowing 1-12 sessions per day.
 - Dashboard cards use this target to render recent daily completion progress.
+
+## 0012_child_level_mastery_state.sql
+
+Adds persisted per-level perfect-session streaks.
+
+- Tracks the current streak of perfect sessions for each learner and level.
+- Promotion can depend on a real streak instead of deriving mastery from all historical completed sessions.

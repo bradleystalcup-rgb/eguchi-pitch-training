@@ -197,6 +197,34 @@ export const childChordReviewState = pgTable(
   }),
 );
 
+export const childLevelMasteryState = pgTable(
+  "child_level_mastery_state",
+  {
+    id: text("id").primaryKey(),
+    childProfileId: text("child_profile_id")
+      .notNull()
+      .references(() => childProfiles.id, { onDelete: "cascade" }),
+    level: integer("level").notNull(),
+    perfectSessionStreak: integer("perfect_session_streak").notNull().default(0),
+    lastSessionId: text("last_session_id"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    childLevelUnique: uniqueIndex("child_level_mastery_state_child_level_unique").on(
+      table.childProfileId,
+      table.level,
+    ),
+    levelRange: check(
+      "child_level_mastery_state_level_between_1_and_15",
+      sql`${table.level} BETWEEN 1 AND 15`,
+    ),
+    streakRange: check(
+      "child_level_mastery_state_perfect_session_streak_nonnegative",
+      sql`${table.perfectSessionStreak} >= 0`,
+    ),
+  }),
+);
+
 export const trainingSessions = pgTable(
   "training_sessions",
   {
