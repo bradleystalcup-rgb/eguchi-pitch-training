@@ -87,11 +87,9 @@ export function ChildDetail({ childId }: { childId: string }) {
         child.level === undefined || child.level === null || child.level === ""
           ? "Level 1"
           : typeof child.level === "number"
-            ? `Level ${child.level}`
-            : child.level,
-      weeklyGoalPercent: child.weeklyGoalPercent ?? child.progress?.recentAccuracy ?? 0,
-      sessionsThisWeek: child.sessionsThisWeek ?? child.progress?.sessionsCompleted ?? 0,
-      favoriteSkill: child.favoriteSkill ?? "First color",
+          ? `Level ${child.level}`
+          : child.level,
+      sessionsCompleted: child.sessionsThisWeek ?? child.progress?.sessionsCompleted ?? 0,
     };
   }, [child]);
 

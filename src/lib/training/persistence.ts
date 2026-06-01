@@ -395,9 +395,11 @@ export async function createChildProfile(input: {
   parentUserId: string;
   displayName: string;
   birthYear?: number | null;
+  level?: number;
 }) {
   const id = crypto.randomUUID();
   const now = new Date();
+  const level = input.level ?? MIN_LEARNER_LEVEL;
 
   const [profile] = await db
     .insert(childProfiles)
@@ -406,6 +408,7 @@ export async function createChildProfile(input: {
       parentUserId: input.parentUserId,
       displayName: input.displayName,
       birthYear: input.birthYear ?? null,
+      currentLevel: level,
       createdAt: now,
       updatedAt: now,
     })
@@ -415,7 +418,7 @@ export async function createChildProfile(input: {
     .insert(childTrainingProgress)
     .values({
       childProfileId: id,
-      currentLevel: MIN_LEARNER_LEVEL,
+      currentLevel: level,
       trainingPhase: "chord_identification",
       updatedAt: now,
     })

@@ -71,6 +71,7 @@ export async function POST(request: Request) {
       parentUserId: user.id,
       displayName: validation.value.displayName,
       birthYear: validation.value.birthYear,
+      level: validation.value.level,
     });
 
     return Response.json(
