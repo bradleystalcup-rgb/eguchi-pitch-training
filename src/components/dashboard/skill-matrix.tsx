@@ -1,7 +1,8 @@
-import { CheckCircle2, Circle, Sparkles } from "lucide-react";
+import { Lock, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import type { SkillMapChordRow, SkillMapSnapshot } from "@/lib/training/types";
 
 export type SkillMatrixItem = {
   id: string;
@@ -10,65 +11,112 @@ export type SkillMatrixItem = {
   score: number;
 };
 
+function fallbackSkillMap(skills: SkillMatrixItem[]): SkillMapSnapshot {
+  return {
+    requiredPerfectSessionStreak: 5,
+    mastered: [],
+    current: skills.map((skill) => ({
+      slug: skill.id,
+      label: skill.label,
+      colorName: skill.label,
+      colorHex: "#e2e8f0",
+      streak: Math.min(5, Math.floor(skill.score / 20)),
+      required: 5,
+      status: skill.score >= 100 ? "mastered" : "current",
+    })),
+    next: null,
+  };
+}
+
+function StreakSegments({ streak, required }: { streak: number; required: number }) {
+  return (
+    <div className="flex gap-1.5" aria-label={`${streak} of ${required} perfect-session streak`}>
+      {Array.from({ length: required }, (_, index) => (
+        <span
+          key={index}
+          className={cn(
+            "h-3 flex-1 rounded-full bg-slate-100",
+            index < streak ? "bg-gradient-to-r from-emerald-400 to-sky-400" : "",
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SkillRow({ row }: { row: SkillMapChordRow }) {
+  const isMastered = row.status === "mastered";
+
+  return (
+    <div className="rounded-2xl border-2 border-slate-100 bg-white p-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="size-9 shrink-0 rounded-full border-2 border-white shadow-sm ring-2 ring-slate-100"
+            style={{ backgroundColor: row.colorHex }}
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-black text-slate-950">{row.label}</h3>
+            <p className="text-xs font-bold text-slate-500">{row.streak}/{row.required} perfect sessions</p>
+          </div>
+        </div>
+        {isMastered ? (
+          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-amber-300 text-amber-950">
+            <Star className="size-4 fill-current" aria-hidden="true" />
+          </span>
+        ) : null}
+      </div>
+      <StreakSegments streak={Math.min(row.streak, row.required)} required={row.required} />
+    </div>
+  );
+}
+
 export function SkillMatrix({
-  skills,
+  skills = [],
+  skillMap,
 }: {
-  skills: SkillMatrixItem[];
+  skills?: SkillMatrixItem[];
+  skillMap?: SkillMapSnapshot;
 }) {
+  const map = skillMap ?? fallbackSkillMap(skills);
+  const rows = [...map.mastered, ...map.current];
+  const next = map.next;
+
   return (
     <Card className="bg-white">
       <CardHeader>
         <div>
           <Badge tone="sky">Skill map</Badge>
-          <CardTitle className="mt-3">Pitch powers</CardTitle>
-          <CardDescription>Quick view of what feels strong and what needs practice.</CardDescription>
+          <CardTitle className="mt-3">Chord mastery</CardTitle>
+          <CardDescription>
+            Get a streak of {map.requiredPerfectSessionStreak} perfect sessions before moving to the next chord.
+          </CardDescription>
         </div>
-        <Sparkles className="h-10 w-10 text-emerald-500" aria-hidden="true" />
       </CardHeader>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {skills.map((skill) => {
-          const level = getLevel(skill.score);
-          const Icon = skill.score >= 80 ? CheckCircle2 : Circle;
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <SkillRow key={row.slug} row={row} />
+        ))}
 
-          return (
-            <div
-              key={skill.id}
-              className={cn(
-                "rounded-3xl border-4 p-4",
-                level === "ready" ? "border-emerald-100 bg-emerald-50" : "",
-                level === "building" ? "border-amber-100 bg-amber-50" : "",
-                level === "new" ? "border-sky-100 bg-sky-50" : "",
-              )}
-            >
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-black tracking-normal text-slate-900">{skill.label}</h3>
-                  <p className="text-sm font-semibold text-slate-600">{skill.description}</p>
-                </div>
-                <Icon className="h-7 w-7 text-emerald-600" aria-hidden="true" />
+        {next ? (
+          <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-3 text-slate-500">
+            <div className="flex items-center gap-3">
+              <span
+                className="size-9 shrink-0 rounded-full border-2 border-white opacity-35 shadow-sm grayscale"
+                style={{ backgroundColor: next.colorHex }}
+                aria-hidden="true"
+              />
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-base font-black text-slate-700">{next.label}</h3>
+                <p className="text-xs font-bold">Unlock the next chord after you get a streak of {next.required}.</p>
               </div>
-              <div className="flex gap-2" aria-label={`${skill.label} score ${skill.score} percent`}>
-                {[20, 40, 60, 80, 100].map((step) => (
-                  <span
-                    key={step}
-                    className={cn(
-                      "h-4 flex-1 rounded-full bg-white",
-                      skill.score >= step ? "bg-gradient-to-r from-emerald-400 to-sky-400" : "",
-                    )}
-                  />
-                ))}
-              </div>
+              <Lock className="size-5 shrink-0" aria-hidden="true" />
             </div>
-          );
-        })}
+          </div>
+        ) : null}
       </div>
     </Card>
   );
-}
-
-function getLevel(score: number) {
-  if (score >= 80) return "ready";
-  if (score >= 45) return "building";
-  return "new";
 }

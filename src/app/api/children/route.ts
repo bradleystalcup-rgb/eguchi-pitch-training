@@ -1,5 +1,6 @@
 import {
   createChildProfile,
+  createEmptySkillMap,
   listChildProfilesForParent,
   type ChildProfileSummary,
 } from "@/lib/training/persistence";
@@ -28,6 +29,7 @@ function childResponse(child: ChildProfileSummary) {
     chordSelectionAlgorithm: child.chordSelectionAlgorithm,
     soundEngine: child.soundEngine,
     progress: child.progress,
+    skillMap: child.skillMap,
   };
 }
 
@@ -111,6 +113,7 @@ export async function POST(request: Request) {
             correctTrials: 0,
             recentAccuracy: 0,
           },
+          skillMap: createEmptySkillMap(child.currentLevel),
         }),
       },
       { status: 201 },

@@ -47,6 +47,7 @@ export async function GET(
         chordSelectionAlgorithm: child.chordSelectionAlgorithm,
         soundEngine: child.soundEngine,
         progress: child.progress,
+        skillMap: child.skillMap,
       },
     });
   } catch (error) {
@@ -200,6 +201,7 @@ export async function PATCH(
         chordSelectionAlgorithm: child.chordSelectionAlgorithm,
         soundEngine: child.soundEngine,
         progress: child.progress,
+        skillMap: child.skillMap,
       },
     });
   } catch (error) {

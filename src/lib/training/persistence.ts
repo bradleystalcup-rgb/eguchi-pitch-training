@@ -13,6 +13,7 @@ import { DEFAULT_CHORD_DEFINITIONS } from "./chords";
 import {
   DEFAULT_PROTOCOL_VERSION,
   calculateProgression,
+  getActiveChordsForLevel,
   getProtocolLevel,
 } from "./protocol";
 import {
@@ -24,6 +25,8 @@ import {
 import type {
   ChordSelectionAlgorithm,
   ProgressSnapshot,
+  ProtocolChord,
+  SkillMapSnapshot,
   TrainingTaskType,
   TrainingTrialPlanItem,
   TrialResult,
@@ -31,6 +34,7 @@ import type {
 
 export const MIN_LEARNER_LEVEL = 1;
 export const MAX_LEARNER_LEVEL = 15;
+export const REQUIRED_PERFECT_SESSION_STREAK = 5;
 
 export type ChildProfileSummary = {
   id: string;
@@ -47,6 +51,7 @@ export type ChildProfileSummary = {
   soundEngine: string;
   dailySessionCounts: DailySessionCount[];
   progress: ProgressSnapshot;
+  skillMap: SkillMapSnapshot;
 };
 
 export type DailySessionCount = {
@@ -200,6 +205,119 @@ function pickStrongestChord(stats: readonly SessionChordStat[]) {
     [...stats].sort((left, right) => right.accuracy - left.accuracy || right.attempts - left.attempts || left.label.localeCompare(right.label))[0] ??
     null
   );
+}
+
+function skillMapRow(input: {
+  chord: ProtocolChord;
+  streak: number;
+  status: "mastered" | "current" | "next";
+}) {
+  return {
+    slug: input.chord.slug,
+    label: input.chord.answerLabel,
+    colorName: input.chord.colorName,
+    colorHex: input.chord.colorHex,
+    streak: input.streak,
+    required: REQUIRED_PERFECT_SESSION_STREAK,
+    status: input.status,
+  };
+}
+
+function findNextLockedChord(currentLevel: number, currentChordSlugs: Set<string>) {
+  for (let level = currentLevel + 1; level <= MAX_LEARNER_LEVEL; level += 1) {
+    const chord = getActiveChordsForLevel(level).find((item) => !currentChordSlugs.has(item.slug));
+    if (chord) return chord;
+  }
+
+  return null;
+}
+
+async function getSkillMapSnapshot(childProfileId: string, currentLevel: number): Promise<SkillMapSnapshot> {
+  const activeChords = getActiveChordsForLevel(currentLevel);
+  const activeChordSlugs = new Set(activeChords.map((chord) => chord.slug));
+  const currentChord = activeChords[activeChords.length - 1];
+  const masteredChords = activeChords.slice(0, -1);
+  const currentChordSlugs = new Set(currentChord ? [currentChord.slug] : []);
+  const streaks = new Map(currentChord ? [[currentChord.slug, 0]] : []);
+  const blocked = new Set<string>();
+
+  const sessions = await db
+    .select({
+      startedAt: trainingSessions.startedAt,
+      completedAt: trainingSessions.completedAt,
+      totalTrials: trainingSessions.totalTrials,
+      correctTrials: trainingSessions.correctTrials,
+      trialPlan: trainingSessions.trialPlan,
+    })
+    .from(trainingSessions)
+    .where(
+      and(
+        eq(trainingSessions.childProfileId, childProfileId),
+        eq(trainingSessions.status, "completed"),
+      ),
+    )
+    .orderBy(desc(trainingSessions.completedAt), desc(trainingSessions.startedAt));
+
+  for (const session of sessions) {
+    if (!currentChord || blocked.size === currentChordSlugs.size) break;
+
+    const sessionChordSlugs = new Set(session.trialPlan.map((trial) => trial.promptChordSlug));
+    const isPerfect = session.totalTrials > 0 && session.correctTrials >= session.totalTrials;
+
+    for (const chordSlug of currentChordSlugs) {
+      if (blocked.has(chordSlug) || !sessionChordSlugs.has(chordSlug)) continue;
+
+      if (isPerfect) {
+        streaks.set(chordSlug, (streaks.get(chordSlug) ?? 0) + 1);
+      } else {
+        blocked.add(chordSlug);
+      }
+    }
+  }
+
+  const mastered = masteredChords.map((chord) =>
+    skillMapRow({
+      chord,
+      streak: REQUIRED_PERFECT_SESSION_STREAK,
+      status: "mastered",
+    }),
+  );
+  const current = currentChord
+    ? [
+        skillMapRow({
+          chord: currentChord,
+          streak: streaks.get(currentChord.slug) ?? 0,
+          status: "current",
+        }),
+      ]
+    : [];
+  const nextChord = findNextLockedChord(currentLevel, activeChordSlugs);
+
+  return {
+    requiredPerfectSessionStreak: REQUIRED_PERFECT_SESSION_STREAK,
+    mastered,
+    current,
+    next: nextChord ? skillMapRow({ chord: nextChord, streak: 0, status: "next" }) : null,
+  };
+}
+
+export function createEmptySkillMap(currentLevel: number): SkillMapSnapshot {
+  const activeChords = getActiveChordsForLevel(currentLevel);
+  const activeChordSlugs = new Set(activeChords.map((chord) => chord.slug));
+  const nextChord = findNextLockedChord(currentLevel, activeChordSlugs);
+
+  return {
+    requiredPerfectSessionStreak: REQUIRED_PERFECT_SESSION_STREAK,
+    mastered: activeChords.slice(0, -1).map((chord) =>
+      skillMapRow({
+        chord,
+        streak: REQUIRED_PERFECT_SESSION_STREAK,
+        status: "mastered",
+      }),
+    ),
+    current: activeChords.slice(-1).map((chord) => skillMapRow({ chord, streak: 0, status: "current" })),
+    next: nextChord ? skillMapRow({ chord: nextChord, streak: 0, status: "next" }) : null,
+  };
 }
 
 async function chooseAdaptiveChordSlug(input: {
@@ -391,6 +509,7 @@ function toChildSummary(row: {
       correctTrials: row.correctTrials ?? 0,
       recentAccuracy: row.recentAccuracy ?? 0,
     },
+    skillMap: createEmptySkillMap(row.currentLevel),
   };
 }
 
@@ -525,10 +644,19 @@ export async function listChildProfilesForParent(parentUserId: string): Promise<
     parentUserId,
     children.map((child) => child.id),
   );
+  const skillMapsByChild = new Map(
+    await Promise.all(
+      children.map(async (child) => [
+        child.id,
+        await getSkillMapSnapshot(child.id, child.currentLevel),
+      ] as const),
+    ),
+  );
 
   return children.map((child) => ({
     ...child,
     dailySessionCounts: dailyCountsByChild.get(child.id) ?? createEmptyDailySessionCounts(),
+    skillMap: skillMapsByChild.get(child.id) ?? child.skillMap,
   }));
 }
 
@@ -568,10 +696,12 @@ export async function getChildProfileForParent(
 
   const child = toChildSummary(row);
   const dailyCountsByChild = await getDailySessionCountsForChildren(parentUserId, [child.id]);
+  const skillMap = await getSkillMapSnapshot(child.id, child.currentLevel);
 
   return {
     ...child,
     dailySessionCounts: dailyCountsByChild.get(child.id) ?? createEmptyDailySessionCounts(),
+    skillMap,
   };
 }
 
@@ -655,7 +785,12 @@ export async function updateChildLevelForParent(input: {
     };
   });
 
-  return updated ? toChildSummary(updated) : null;
+  if (!updated) return null;
+
+  return {
+    ...toChildSummary(updated),
+    skillMap: await getSkillMapSnapshot(updated.id, updated.currentLevel),
+  };
 }
 
 export async function updateChildPracticeSettingsForParent(input: {
@@ -735,6 +870,7 @@ export async function updateChildPracticeSettingsForParent(input: {
     ...profile,
     dailySessionCounts: createEmptyDailySessionCounts(),
     progress,
+    skillMap: await getSkillMapSnapshot(profile.id, profile.currentLevel),
   };
 }
 

@@ -63,6 +63,25 @@ export interface ProgressSnapshot {
   recentAccuracy: number;
 }
 
+export type SkillMapChordStatus = "mastered" | "current" | "next";
+
+export interface SkillMapChordRow {
+  slug: string;
+  label: string;
+  colorName: string;
+  colorHex: string;
+  streak: number;
+  required: number;
+  status: SkillMapChordStatus;
+}
+
+export interface SkillMapSnapshot {
+  requiredPerfectSessionStreak: number;
+  mastered: SkillMapChordRow[];
+  current: SkillMapChordRow[];
+  next: SkillMapChordRow | null;
+}
+
 export interface ProgressionDecision {
   nextLevel: number;
   nextTrainingPhase: TrainingTaskType;

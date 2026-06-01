@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import type { SkillMapSnapshot } from "@/lib/training/types";
 
 export type ChildDetailData = {
   id: string;
@@ -32,6 +33,7 @@ export type ChildDetailData = {
     sessionsCompleted?: number | null;
     recentAccuracy?: number | null;
   } | null;
+  skillMap?: SkillMapSnapshot;
   skills?: SkillMatrixItem[];
 };
 
@@ -187,7 +189,7 @@ export function ChildDetail({ childId }: { childId: string }) {
 
       <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <ChildProgressCard {...cardProps} />
-        <SkillMatrix skills={child.skills?.length ? child.skills : defaultSkills} />
+        <SkillMatrix skills={child.skills?.length ? child.skills : defaultSkills} skillMap={child.skillMap} />
       </section>
     </div>
   );
