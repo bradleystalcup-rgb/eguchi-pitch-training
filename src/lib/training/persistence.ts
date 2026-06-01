@@ -661,6 +661,8 @@ export async function updateChildLevelForParent(input: {
 export async function updateChildPracticeSettingsForParent(input: {
   parentUserId: string;
   childProfileId: string;
+  displayName?: string;
+  birthYear?: number | null;
   showColorAccessibilityKeys?: boolean;
   warmUpChordsEnabled?: boolean | null;
   dailySessionGoal?: number;
@@ -672,6 +674,8 @@ export async function updateChildPracticeSettingsForParent(input: {
 }): Promise<ChildProfileSummary | null> {
   const now = new Date();
   const settings: {
+    displayName?: string;
+    birthYear?: number | null;
     showColorAccessibilityKeys?: boolean;
     warmUpChordsEnabled?: boolean | null;
     dailySessionGoal?: number;
@@ -683,6 +687,8 @@ export async function updateChildPracticeSettingsForParent(input: {
     updatedAt: Date;
   } = { updatedAt: now };
 
+  if (input.displayName !== undefined) settings.displayName = input.displayName;
+  if (input.birthYear !== undefined) settings.birthYear = input.birthYear;
   if (input.showColorAccessibilityKeys !== undefined) {
     settings.showColorAccessibilityKeys = input.showColorAccessibilityKeys;
   }

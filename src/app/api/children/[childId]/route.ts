@@ -3,7 +3,7 @@ import {
   updateChildPracticeSettingsForParent,
 } from "@/lib/training/persistence";
 import { getCurrentUser } from "@/lib/session";
-import { errorResponse, validateChildId } from "../_utils";
+import { errorResponse, isUniqueConstraintError, validateChildId } from "../_utils";
 
 export async function GET(
   _request: Request,
@@ -92,6 +92,8 @@ export async function PATCH(
   const chordSelectionAlgorithm = (payload as Record<string, unknown>).chordSelectionAlgorithm;
   const soundEngine = (payload as Record<string, unknown>).soundEngine;
   const dailySessionGoal = (payload as Record<string, unknown>).dailySessionGoal;
+  const displayName = (payload as Record<string, unknown>).displayName;
+  const birthYear = (payload as Record<string, unknown>).birthYear;
 
   if (showColorAccessibilityKeys !== undefined && typeof showColorAccessibilityKeys !== "boolean") {
     return errorResponse("bad_request", "showColorAccessibilityKeys must be a boolean.", 400);
@@ -112,9 +114,22 @@ export async function PATCH(
       accidentalMode === undefined &&
       chordSelectionAlgorithm === undefined &&
       soundEngine === undefined &&
-      dailySessionGoal === undefined
+      dailySessionGoal === undefined &&
+      displayName === undefined &&
+      birthYear === undefined
     ) {
       return errorResponse("bad_request", "At least one child setting is required.", 400);
+    }
+  }
+  if (displayName !== undefined) {
+    if (typeof displayName !== "string" || displayName.trim().length < 2 || displayName.trim().length > 80) {
+      return errorResponse("bad_request", "displayName must be between 2 and 80 characters.", 400);
+    }
+  }
+  if (birthYear !== undefined && birthYear !== null) {
+    const currentYear = new Date().getUTCFullYear();
+    if (!Number.isInteger(birthYear) || typeof birthYear !== "number" || birthYear < 1900 || birthYear > currentYear) {
+      return errorResponse("bad_request", `birthYear must be between 1900 and ${currentYear}.`, 400);
     }
   }
   if (dailySessionGoal !== undefined) {
@@ -147,6 +162,8 @@ export async function PATCH(
     const child = await updateChildPracticeSettingsForParent({
       parentUserId: user.id,
       childProfileId: validChildId,
+      displayName: typeof displayName === "string" ? displayName.trim() : undefined,
+      birthYear: typeof birthYear === "number" || birthYear === null ? birthYear : undefined,
       showColorAccessibilityKeys:
         typeof showColorAccessibilityKeys === "boolean" ? showColorAccessibilityKeys : undefined,
       warmUpChordsEnabled:
@@ -186,6 +203,14 @@ export async function PATCH(
       },
     });
   } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      return errorResponse(
+        "conflict",
+        "A child profile with this display name already exists.",
+        409,
+      );
+    }
+
     console.error("Failed to update child practice settings", error);
     return errorResponse("internal_error", "Unable to update child practice settings.", 500);
   }
