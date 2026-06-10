@@ -12,3 +12,8 @@ routes = [
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"
+
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "72b4657596e84b7eadf9eb6615d047dd"
