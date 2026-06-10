@@ -237,6 +237,7 @@ async function getLevelPerfectSessionStreak(childProfileId: string, level: numbe
   const [state] = await db
     .select({
       perfectSessionStreak: childLevelMasteryState.perfectSessionStreak,
+      _cacheBuster: sql`now()`,
     })
     .from(childLevelMasteryState)
     .where(
@@ -352,10 +353,15 @@ async function chooseAdaptiveChordSlug(input: {
 }) {
   if (input.chordSlugs.length <= 1) return input.chordSlugs[0];
 
-  const states = await db
-    .select()
+  const rows = await db
+    .select({
+      ...getTableColumns(childChordReviewState),
+      _cacheBuster: sql`now()`,
+    })
     .from(childChordReviewState)
     .where(eq(childChordReviewState.childProfileId, input.childProfileId));
+  const states = rows.map(({ _cacheBuster, ...state }) => state);
+
   return chooseAdaptiveChordSlugFromState({
     chordSlugs: input.chordSlugs,
     previousChordSlug: input.previousChordSlug,
@@ -898,7 +904,7 @@ export async function updateChildPracticeSettingsForParent(input: {
 
 export async function assertParentOwnsChild(parentUserId: string, childProfileId: string) {
   const [profile] = await db
-    .select({ id: childProfiles.id })
+    .select({ id: childProfiles.id, _cacheBuster: sql`now()` })
     .from(childProfiles)
     .where(and(eq(childProfiles.id, childProfileId), eq(childProfiles.parentUserId, parentUserId)))
     .limit(1);
@@ -1099,7 +1105,10 @@ export async function recordTrainingAttempt(input: {
 
 export async function getProgressSnapshot(childProfileId: string): Promise<ProgressSnapshot> {
   const [progress] = await db
-    .select()
+    .select({
+      ...getTableColumns(childTrainingProgress),
+      _cacheBuster: sql`now()`,
+    })
     .from(childTrainingProgress)
     .where(eq(childTrainingProgress.childProfileId, childProfileId))
     .limit(1);
