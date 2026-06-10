@@ -17,3 +17,4 @@ binding = "ASSETS"
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "72b4657596e84b7eadf9eb6615d047dd"
+localConnectionString = "postgres://eguchi_app:password@localhost:5432/eguchi_pitch_training"
