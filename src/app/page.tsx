@@ -1,4 +1,16 @@
-import { ArrowRight, BarChart3, CheckCircle2, Ear, Heart, Leaf, Palette, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  BarChart3,
+  CheckCircle2,
+  Ear,
+  Heart,
+  Leaf,
+  Palette,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Target,
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
@@ -6,20 +18,25 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 
 export default function HomePage() {
-  const steps = [
+  const trainingSteps = [
     {
-      title: "Listen",
-      description: "Children hear short color-coded chords in focused practice sessions.",
+      title: "Create a learner profile",
+      description: "Set up a child profile so practice history, settings, and level progress stay organized.",
+      icon: Sparkles,
+    },
+    {
+      title: "Hear a chord",
+      description: "Pitch Patch plays a short color-coded chord prompt during a focused listening round.",
       icon: Ear,
     },
     {
-      title: "Choose",
-      description: "Big friendly color choices keep attention on hearing, not reading instructions.",
+      title: "Choose the color",
+      description: "Your child picks the matching color, keeping the task visual, fast, and kid-friendly.",
       icon: Palette,
     },
     {
-      title: "Grow",
-      description: "Progress unlocks steadily as learners build perfect-session streaks.",
+      title: "Repeat short sessions",
+      description: "Small sessions make it easier to practice consistently without turning it into homework.",
       icon: Leaf,
     },
   ];
@@ -27,6 +44,28 @@ export default function HomePage() {
     "Playful ear training for young musicians",
     "Short daily sessions that fit family routines",
     "Parent-guided progress for each learner",
+  ];
+  const dashboardFeatures = [
+    {
+      title: "Learner profiles",
+      description: "Keep each child's practice settings and training level separate.",
+      icon: ShieldCheck,
+    },
+    {
+      title: "Daily goals",
+      description: "See recent session counts against a simple practice target.",
+      icon: Target,
+    },
+    {
+      title: "Progress signals",
+      description: "Track accuracy, level progress, and practice history from one place.",
+      icon: BarChart3,
+    },
+    {
+      title: "Practice controls",
+      description: "Adjust color keys, warmups, hotkeys, sound engine, and answer flow per child.",
+      icon: Settings2,
+    },
   ];
 
   return (
@@ -105,69 +144,90 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section aria-labelledby="how-it-works-heading" className="space-y-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <Badge tone="pink">How it works</Badge>
-              <h2 id="how-it-works-heading" className="mt-3 text-3xl font-black text-rose-950">
-                A simple loop kids can repeat.
+        <section
+          aria-labelledby="how-it-works-heading"
+          className="overflow-hidden rounded-[1.75rem] bg-white shadow-[0_12px_36px_rgba(159,18,57,0.08)] ring-1 ring-rose-100"
+        >
+          <div className="grid gap-0 lg:grid-cols-[0.82fr_1.18fr]">
+            <div className="bg-rose-900 p-6 text-white sm:p-8">
+              <Badge tone="pink" className="bg-white/12 text-rose-50 ring-white/20">
+                How it works
+              </Badge>
+              <h2 id="how-it-works-heading" className="mt-4 text-3xl font-black sm:text-4xl">
+                A short training process families can repeat.
               </h2>
-            </div>
-            <p className="max-w-xl text-base font-semibold leading-7 text-slate-600">
-              The practice flow stays short and predictable so families can build a habit.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-3">
-          {steps.map((step) => {
-            const Icon = step.icon;
-
-            return (
-              <article
-                key={step.title}
-                className="rounded-2xl border-4 border-white bg-white/88 p-6 shadow-[0_10px_28px_rgba(159,18,57,0.08)]"
-              >
-                <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-rose-100 text-rose-700">
-                  <Icon aria-hidden="true" className="size-6" />
-                </div>
-                <h2 className="text-2xl font-black text-rose-950">{step.title}</h2>
-                <p className="mt-2 text-base font-semibold leading-7 text-slate-600">
-                  {step.description}
+              <p className="mt-4 text-base font-semibold leading-7 text-rose-100">
+                Pitch Patch is built around a predictable listening loop: hear a chord,
+                make a color choice, and repeat in short sessions. The process is simple
+                enough for young learners and structured enough for parents to guide.
+              </p>
+              <div className="mt-6 rounded-2xl bg-white/10 p-4 ring-1 ring-white/15">
+                <p className="text-sm font-black uppercase tracking-normal text-amber-200">
+                  Training focus
                 </p>
-              </article>
-            );
-          })}
+                <p className="mt-2 text-lg font-black leading-7">
+                  Build recognition through repeated chord-to-color associations.
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-4 bg-rose-50/55 p-5 sm:p-7">
+              {trainingSteps.map((step, index) => {
+                const Icon = step.icon;
+
+                return (
+                  <article
+                    key={step.title}
+                    className="grid gap-4 rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(159,18,57,0.07)] sm:grid-cols-[auto_1fr]"
+                  >
+                    <div className="flex items-center gap-3 sm:block">
+                      <div className="grid size-12 place-items-center rounded-2xl bg-rose-100 text-rose-700">
+                        <Icon aria-hidden="true" className="size-6" />
+                      </div>
+                      <span className="text-sm font-black uppercase tracking-normal text-rose-500 sm:mt-3 sm:block">
+                        Step {index + 1}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-rose-950">{step.title}</h3>
+                      <p className="mt-2 text-base font-semibold leading-7 text-slate-600">
+                        {step.description}
+                      </p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </div>
         </section>
 
-        <section className="grid gap-5 rounded-[1.75rem] bg-white/82 p-5 shadow-[0_12px_32px_rgba(159,18,57,0.09)] lg:grid-cols-[0.95fr_1.05fr] lg:p-7">
-          <div className="space-y-3">
-            <Badge tone="amber" className="bg-amber-100 text-amber-900 ring-amber-200">
-              Parent dashboard
-            </Badge>
-            <h2 className="text-balance text-3xl font-black text-rose-950 sm:text-4xl">
-              See what happened after practice.
-            </h2>
-            <p className="text-base font-semibold leading-7 text-slate-600">
-              Pitch Patch gives parents enough structure to guide practice without
-              turning a short session into homework.
-            </p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl bg-rose-50 p-5">
-              <BarChart3 aria-hidden="true" className="mb-3 size-6 text-rose-700" />
-              <h3 className="text-lg font-black text-rose-950">Progress at a glance</h3>
-              <p className="mt-2 font-semibold leading-7 text-slate-600">
-                Track learner profiles, daily session goals, accuracy, and level
-                progress from one parent-friendly dashboard.
+        <section className="rounded-[1.75rem] bg-[linear-gradient(135deg,#ffffff,#fff7ed)] p-5 shadow-[0_12px_34px_rgba(159,18,57,0.08)] ring-1 ring-amber-100 lg:p-8">
+          <div className="grid gap-7 lg:grid-cols-[0.75fr_1.25fr] lg:items-start">
+            <div className="space-y-3">
+              <Badge tone="amber" className="bg-amber-100 text-amber-900 ring-amber-200">
+                Parent dashboard
+              </Badge>
+              <h2 className="text-balance text-3xl font-black text-rose-950 sm:text-4xl">
+                See what happened after practice.
+              </h2>
+              <p className="text-base font-semibold leading-7 text-slate-600">
+                Pitch Patch gives parents enough structure to guide practice without
+                turning a short session into homework.
               </p>
             </div>
-            <div className="rounded-2xl bg-amber-50 p-5">
-              <ShieldCheck aria-hidden="true" className="mb-3 size-6 text-amber-700" />
-              <h3 className="text-lg font-black text-rose-950">Built for routine</h3>
-              <p className="mt-2 font-semibold leading-7 text-slate-600">
-                Keep practice focused with colorful choices, short sessions, and
-                settings that can be adjusted per child.
-              </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {dashboardFeatures.map((feature) => {
+                const Icon = feature.icon;
+
+                return (
+                  <article key={feature.title} className="rounded-2xl bg-white p-5 shadow-[0_8px_24px_rgba(159,18,57,0.07)]">
+                    <Icon aria-hidden="true" className="mb-3 size-6 text-rose-700" />
+                    <h3 className="text-lg font-black text-rose-950">{feature.title}</h3>
+                    <p className="mt-2 font-semibold leading-7 text-slate-600">
+                      {feature.description}
+                    </p>
+                  </article>
+                );
+              })}
             </div>
           </div>
         </section>
