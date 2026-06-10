@@ -669,14 +669,11 @@ export async function listChildProfilesForParent(parentUserId: string): Promise<
     parentUserId,
     children.map((child) => child.id),
   );
-  const skillMapsByChild = new Map(
-    await Promise.all(
-      children.map(async (child) => [
-        child.id,
-        await getSkillMapSnapshot(child.id, child.currentLevel),
-      ] as const),
-    ),
-  );
+  const skillMapsByChild = new Map<string, SkillMapSnapshot>();
+
+  for (const child of children) {
+    skillMapsByChild.set(child.id, await getSkillMapSnapshot(child.id, child.currentLevel));
+  }
 
   return children.map((child) => ({
     ...child,
@@ -1290,36 +1287,38 @@ export async function listPracticeSessionHistoryForParent(input: {
     .orderBy(desc(trainingSessions.completedAt), desc(trainingSessions.startedAt))
     .limit(input.limit ?? 12);
 
-  return Promise.all(
-    sessions.map(async (session) => {
-      const trials = await db
-        .select({
-          promptChordSlug: trainingTrials.promptChordSlug,
-          isCorrect: trainingTrials.isCorrect,
-        })
-        .from(trainingTrials)
-        .where(eq(trainingTrials.sessionId, session.id))
-        .orderBy(asc(trainingTrials.trialIndex));
-      const chordStats = summarizeChordStats(trials);
-      const totalTrials = trials.length || session.totalTrials;
-      const correctTrials = trials.filter((trial) => trial.isCorrect).length || session.correctTrials;
+  const history: PracticeSessionHistoryItem[] = [];
 
-      return {
-        id: session.id,
-        level: session.level,
-        trainingPhase: session.trainingPhase,
-        selectionAlgorithm: session.selectionAlgorithm,
-        startedAt: session.startedAt,
-        completedAt: session.completedAt,
-        totalTrials,
-        correctTrials,
-        accuracy: totalTrials ? Math.round((correctTrials / totalTrials) * 100) : 0,
-        longestStreak: longestCorrectStreak(trials),
-        weakestChord: pickWeakestChord(chordStats),
-        strongestChord: pickStrongestChord(chordStats),
-      };
-    }),
-  );
+  for (const session of sessions) {
+    const trials = await db
+      .select({
+        promptChordSlug: trainingTrials.promptChordSlug,
+        isCorrect: trainingTrials.isCorrect,
+      })
+      .from(trainingTrials)
+      .where(eq(trainingTrials.sessionId, session.id))
+      .orderBy(asc(trainingTrials.trialIndex));
+    const chordStats = summarizeChordStats(trials);
+    const totalTrials = trials.length || session.totalTrials;
+    const correctTrials = trials.filter((trial) => trial.isCorrect).length || session.correctTrials;
+
+    history.push({
+      id: session.id,
+      level: session.level,
+      trainingPhase: session.trainingPhase,
+      selectionAlgorithm: session.selectionAlgorithm,
+      startedAt: session.startedAt,
+      completedAt: session.completedAt,
+      totalTrials,
+      correctTrials,
+      accuracy: totalTrials ? Math.round((correctTrials / totalTrials) * 100) : 0,
+      longestStreak: longestCorrectStreak(trials),
+      weakestChord: pickWeakestChord(chordStats),
+      strongestChord: pickStrongestChord(chordStats),
+    });
+  }
+
+  return history;
 }
 
 export async function getPracticeSessionDetailForParent(input: {

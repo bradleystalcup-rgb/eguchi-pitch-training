@@ -23,6 +23,9 @@ invocation_logs = true
 [observability.traces]
 enabled = false
 
+[vars]
+BETTER_AUTH_URL = "https://pitch-patch.bradstalcup.com"
+
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "72b4657596e84b7eadf9eb6615d047dd"
