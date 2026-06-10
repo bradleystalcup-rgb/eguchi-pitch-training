@@ -26,16 +26,14 @@ export function AppShell({
             className="inline-flex min-w-0 items-center gap-3 text-xl font-black tracking-normal text-slate-950"
             aria-label="Pitch Patch home"
           >
-            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-rose-100 shadow-sm ring-2 ring-rose-200">
-              <Image
-                src="/brand/pitch-patch-logo-tight.png"
-                alt=""
-                width={32}
-                height={44}
-                aria-hidden="true"
-                className="h-10 w-auto object-contain"
-              />
-            </span>
+            <Image
+              src="/brand/pitch-patch-logo-tight.png"
+              alt=""
+              width={32}
+              height={44}
+              aria-hidden="true"
+              className="h-11 w-auto shrink-0 object-contain drop-shadow-[0_4px_6px_rgba(159,18,57,0.12)]"
+            />
             <span className="flex min-w-0 flex-col leading-none">
               <span>Pitch Patch</span>
               <span className="mt-1 hidden text-xs font-black text-rose-700 sm:block">
