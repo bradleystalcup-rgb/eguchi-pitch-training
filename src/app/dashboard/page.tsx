@@ -4,9 +4,19 @@ import { UserRound } from "lucide-react";
 import { AppShell, PlaceholderCard } from "@/components/app-shell";
 import { ChildrenDashboard } from "@/components/dashboard/children-dashboard";
 import { auth } from "@/lib/auth";
+import { isNextDynamicServerUsageError, logServerError } from "@/lib/logging";
 
 export default async function DashboardPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+  let session;
+
+  try {
+    session = await auth.api.getSession({ headers: await headers() });
+  } catch (error) {
+    if (!isNextDynamicServerUsageError(error)) {
+      logServerError("Failed to load dashboard session", error);
+    }
+    throw error;
+  }
 
   if (!session) {
     redirect("/sign-in");
