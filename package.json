@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev -p 3002",
     "build": "next build",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "build:cloudflare": "opennextjs-cloudflare build",
+    "preview": "npm run build:cloudflare && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare deploy",
+    "deploy:cloudflare": "npm run build:cloudflare && npm run deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "start": "next start",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
