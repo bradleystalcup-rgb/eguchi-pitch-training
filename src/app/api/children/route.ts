@@ -5,6 +5,7 @@ import {
   type ChildProfileSummary,
 } from "@/lib/training/persistence";
 import { getCurrentUser } from "@/lib/session";
+import { logServerError } from "@/lib/logging";
 import {
   errorResponse,
   isUniqueConstraintError,
@@ -54,7 +55,7 @@ export async function GET() {
     const children = await listChildProfilesForParent(user.id);
     return Response.json({ children: children.map(childResponse) });
   } catch (error) {
-    console.error("Failed to list child profiles", error);
+    logServerError("Failed to list child profiles", error);
     return errorResponse("internal_error", "Unable to list child profiles.", 500);
   }
 }
@@ -127,7 +128,7 @@ export async function POST(request: Request) {
       );
     }
 
-    console.error("Failed to create child profile", error);
+    logServerError("Failed to create child profile", error);
     return errorResponse("internal_error", "Unable to create child profile.", 500);
   }
 }

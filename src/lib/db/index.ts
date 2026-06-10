@@ -1,6 +1,9 @@
+import "pg-cloudflare";
+
 import { drizzle } from "drizzle-orm/node-postgres";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { Pool } from "pg";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import * as schema from "./schema";
 
@@ -28,21 +31,44 @@ function getConnectionString() {
   return process.env.DATABASE_URL ?? "postgresql://postgres:postgres@localhost:5432/eguchi_pitch_training";
 }
 
-const connectionString = getConnectionString();
-
 const globalForDb = globalThis as typeof globalThis & {
   pgPool?: Pool;
+  db?: NodePgDatabase<typeof schema>;
 };
 
-export const pool =
-  globalForDb.pgPool ??
-  new Pool({
-    connectionString,
+function getPool() {
+  if (globalForDb.pgPool) {
+    return globalForDb.pgPool;
+  }
+
+  const pool = new Pool({
+    connectionString: getConnectionString(),
   });
 
-if (process.env.NODE_ENV !== "production") {
   globalForDb.pgPool = pool;
+  return pool;
 }
 
-export const db = drizzle(pool, { schema });
+function getDb() {
+  if (globalForDb.db) {
+    return globalForDb.db;
+  }
+
+  const db = drizzle(getPool(), { schema });
+  globalForDb.db = db;
+  return db;
+}
+
+export const pool = new Proxy({} as Pool, {
+  get(_target, property, receiver) {
+    return Reflect.get(getPool(), property, receiver);
+  },
+});
+
+export const db = new Proxy({} as NodePgDatabase<typeof schema>, {
+  get(_target, property, receiver) {
+    return Reflect.get(getDb(), property, receiver);
+  },
+});
+
 export { schema };
