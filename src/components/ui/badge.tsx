@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 type BadgeTone = "sky" | "green" | "amber" | "pink" | "slate";
 
 const tones: Record<BadgeTone, string> = {
-  sky: "bg-violet-100 text-violet-900 ring-violet-200",
+  sky: "bg-rose-100 text-rose-900 ring-rose-200",
   green: "bg-emerald-100 text-emerald-800 ring-emerald-200",
   amber: "bg-amber-100 text-amber-900 ring-amber-200",
   pink: "bg-pink-100 text-pink-800 ring-pink-200",

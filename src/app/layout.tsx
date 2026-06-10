@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Eguchi Pitch Training",
-  description: "Child-friendly chord color ear training inspired by the Eguchi method.",
+  title: "Pitch Patch",
+  description:
+    "Nurturing young musical ears with child-friendly chord color training inspired by the Eguchi method.",
 };
 
 export default function RootLayout({

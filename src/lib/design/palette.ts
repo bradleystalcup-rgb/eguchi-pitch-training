@@ -1,16 +1,16 @@
 export const sitePalette = {
-  primary: "#c4b5fd",
-  primaryStrong: "#8b5cf6",
-  primarySoft: "#ede9fe",
-  primaryInk: "#4c1d95",
-  secondary: "#fbcfe8",
-  secondaryStrong: "#ec4899",
+  primary: "#fda4af",
+  primaryStrong: "#e11d48",
+  primarySoft: "#fff1f2",
+  primaryInk: "#881337",
+  secondary: "#86efac",
+  secondaryStrong: "#16a34a",
   accent: "#fde68a",
   success: "#86efac",
   danger: "#fca5a5",
   surface: "#fff7ed",
-  surfaceCool: "#f5f3ff",
-  ink: "#1e1b4b",
+  surfaceCool: "#fdf2f8",
+  ink: "#3f0f1f",
 } as const;
 
 export const chordPalette = {

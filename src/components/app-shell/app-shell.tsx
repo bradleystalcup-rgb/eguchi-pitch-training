@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { BookOpen, Home, Sparkles, UserRoundPlus } from "lucide-react";
+import Image from "next/image";
+import { BookOpen, Home, UserRoundPlus } from "lucide-react";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -16,24 +17,36 @@ export function AppShell({
   isSignedIn?: boolean;
 }) {
   return (
-    <div className="min-h-screen bg-violet-50 text-slate-900">
+    <div className="min-h-screen bg-rose-50 text-slate-900">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-slate-950 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
       >
         Skip to main content
       </a>
-      <header className="border-b-4 border-violet-200 bg-white/90 backdrop-blur">
+      <header className="border-b-4 border-rose-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <Link
             href="/"
             className="inline-flex items-center gap-3 text-xl font-black tracking-normal text-slate-950"
-            aria-label="Eguchi Pitch Training home"
+            aria-label="Pitch Patch home"
           >
-            <span className="grid size-11 place-items-center rounded-2xl bg-violet-200 text-violet-950 shadow-sm">
-              <Sparkles aria-hidden="true" className="size-6" />
+            <span className="grid size-12 place-items-center rounded-2xl bg-rose-100 shadow-sm ring-2 ring-rose-200">
+              <Image
+                src="/brand/pitch-patch-logo-v4.png"
+                alt=""
+                width={44}
+                height={44}
+                aria-hidden="true"
+                className="h-10 w-10 object-contain"
+              />
             </span>
-            <span>Eguchi Pitch Club</span>
+            <span className="flex flex-col leading-none">
+              <span>Pitch Patch</span>
+              <span className="mt-1 text-xs font-black text-rose-700">
+                Nurturing young musical ears
+              </span>
+            </span>
           </Link>
           <nav aria-label="Main navigation">
             <ul className="flex flex-wrap gap-2">
