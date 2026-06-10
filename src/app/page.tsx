@@ -41,8 +41,8 @@ export default function HomePage() {
                   Pitch Patch
                 </h1>
                 <p className="max-w-2xl text-pretty text-xl font-bold leading-8 text-rose-950/80 sm:text-2xl">
-                  Short, colorful chord games that help parents nurture a child&apos;s
-                  ear for pitch with simple daily practice.
+                  Perfect pitch is not just an innate gift. Short, colorful chord
+                  games help parents nurture a child&apos;s ear with simple daily practice.
                 </p>
                 <p className="max-w-2xl text-base font-semibold leading-7 text-slate-700">
                   Create a learner profile, start a listening session, and watch progress
