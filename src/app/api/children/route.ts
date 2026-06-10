@@ -44,8 +44,29 @@ function createEmptyDailySessionCounts() {
   }));
 }
 
+async function getAuthenticatedUser() {
+  try {
+    return { user: await getCurrentUser() };
+  } catch (error) {
+    logServerError("Failed to load current user for child profiles", error);
+    return {
+      response: errorResponse(
+        "internal_error",
+        "Unable to verify the current session.",
+        500,
+      ),
+    };
+  }
+}
+
 export async function GET() {
-  const user = await getCurrentUser();
+  const authResult = await getAuthenticatedUser();
+
+  if ("response" in authResult) {
+    return authResult.response;
+  }
+
+  const { user } = authResult;
 
   if (!user) {
     return errorResponse("unauthorized", "Authentication is required.", 401);
@@ -61,7 +82,13 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
+  const authResult = await getAuthenticatedUser();
+
+  if ("response" in authResult) {
+    return authResult.response;
+  }
+
+  const { user } = authResult;
 
   if (!user) {
     return errorResponse("unauthorized", "Authentication is required.", 401);
