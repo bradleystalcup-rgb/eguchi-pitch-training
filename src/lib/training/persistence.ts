@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import {
@@ -966,12 +966,18 @@ export async function startTrainingSession(input: {
 }
 
 export async function getTrainingSessionForParent(parentUserId: string, sessionId: string) {
-  const [session] = await db
-    .select()
+  const [row] = await db
+    .select({
+      ...getTableColumns(trainingSessions),
+      _cacheBuster: sql`now()`,
+    })
     .from(trainingSessions)
     .where(and(eq(trainingSessions.id, sessionId), eq(trainingSessions.parentUserId, parentUserId)))
     .limit(1);
 
+  if (!row) return null;
+
+  const { _cacheBuster, ...session } = row;
   return session ?? null;
 }
 
