@@ -13,6 +13,7 @@ export const auth = betterAuth({
   },
   secret: process.env.BETTER_AUTH_SECRET ?? "development-only-change-me-before-deploy",
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3002",
+  trustedOrigins: ["https://pitch-patch.bradstalcup.com"],
 });
 
 export type Auth = typeof auth;

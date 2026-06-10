@@ -3,12 +3,12 @@
 The app is intended to run at:
 
 ```txt
-https://eguchi.evidentco.com
+https://pitch-patch.bradstalcup.com
 ```
 
 ## Runtime
 
-- Host: `eguchi.evidentco.com`
+- Host: `pitch-patch.bradstalcup.com`
 - App port: `3002`
 - Process manager: PM2
 - Reverse proxy: nginx
@@ -21,11 +21,15 @@ Set these for the PM2 process before relying on real auth/database behavior:
 ```bash
 DATABASE_URL="postgres://eguchi_app:replace-with-db-password@localhost:5432/eguchi_pitch_training"
 BETTER_AUTH_SECRET="replace-with-a-long-random-secret"
-BETTER_AUTH_URL="https://eguchi.evidentco.com"
+BETTER_AUTH_URL="https://pitch-patch.bradstalcup.com"
 ```
 
 Use a long generated value for `BETTER_AUTH_SECRET` and a unique strong password for
 `eguchi_app`. Do not run the app against the `postgres` superuser in production.
+
+`https://pitch-patch.bradstalcup.com` is also listed in Better Auth's
+`trustedOrigins` config so auth requests from the Cloudflare custom domain pass
+origin validation.
 
 ## Database Rollout
 
