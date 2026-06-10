@@ -1,0 +1,14 @@
+"$schema" = "./node_modules/wrangler/config-schema.json"
+
+main = ".open-next/worker.js"
+name = "pitch-patch"
+compatibility_date = "2026-06-10"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "pitch-patch.bradstalcup.com", custom_domain = true },
+]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
