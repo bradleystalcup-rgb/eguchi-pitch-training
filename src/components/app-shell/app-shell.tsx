@@ -1,13 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
-import { BookOpen, Home, UserRoundPlus } from "lucide-react";
+import { Code2, LayoutDashboard, LogIn, UserRoundPlus } from "lucide-react";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { buttonVariants } from "@/components/ui/button";
-
-const navItems = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/dashboard", label: "Dashboard", icon: BookOpen },
-];
 
 export function AppShell({
   children,
@@ -25,63 +20,57 @@ export function AppShell({
         Skip to main content
       </a>
       <header className="border-b-4 border-rose-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <Link
             href="/"
-            className="inline-flex items-center gap-3 text-xl font-black tracking-normal text-slate-950"
+            className="inline-flex min-w-0 items-center gap-3 text-xl font-black tracking-normal text-slate-950"
             aria-label="Pitch Patch home"
           >
-            <span className="grid size-12 place-items-center rounded-2xl bg-rose-100 shadow-sm ring-2 ring-rose-200">
+            <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-rose-100 shadow-sm ring-2 ring-rose-200">
               <Image
-                src="/brand/pitch-patch-logo-v4.png"
+                src="/brand/pitch-patch-logo-tight.png"
                 alt=""
-                width={44}
+                width={32}
                 height={44}
                 aria-hidden="true"
-                className="h-10 w-10 object-contain"
+                className="h-10 w-auto object-contain"
               />
             </span>
-            <span className="flex flex-col leading-none">
+            <span className="flex min-w-0 flex-col leading-none">
               <span>Pitch Patch</span>
-              <span className="mt-1 text-xs font-black text-rose-700">
+              <span className="mt-1 hidden text-xs font-black text-rose-700 sm:block">
                 Nurturing young musical ears
               </span>
             </span>
           </Link>
-          <nav aria-label="Main navigation">
-            <ul className="flex flex-wrap gap-2">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className={buttonVariants({
-                        variant: "ghost",
-                        size: "sm",
-                        className: "rounded-full shadow-sm",
-                      })}
-                    >
-                      <Icon aria-hidden="true" className="size-4" />
-                      {item.label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            {!isSignedIn ? (
+              <Link
+                href="/sign-in"
+                className={buttonVariants({
+                  variant: "ghost",
+                  size: "sm",
+                  className: "hidden rounded-full bg-white/85 text-rose-950 ring-rose-200 sm:inline-flex",
+                })}
+              >
+                <LogIn aria-hidden="true" className="size-4" />
+                Login
+              </Link>
+            ) : null}
             <Link
               href={isSignedIn ? "/dashboard" : "/sign-up"}
               className={buttonVariants({
-                variant: "secondary",
+                variant: "primary",
                 size: "sm",
-                className: "rounded-full shadow-sm",
+                className: "rounded-full bg-rose-500 text-white shadow-[0_6px_0_#be123c] hover:bg-rose-400",
               })}
             >
-              <UserRoundPlus aria-hidden="true" className="size-4" />
-              {isSignedIn ? "Learners" : "Join"}
+              {isSignedIn ? (
+                <LayoutDashboard aria-hidden="true" className="size-4" />
+              ) : (
+                <UserRoundPlus aria-hidden="true" className="size-4" />
+              )}
+              {isSignedIn ? "Dashboard" : "Join"}
             </Link>
             {isSignedIn ? <SignOutButton /> : null}
           </div>
@@ -90,6 +79,26 @@ export function AppShell({
       <main id="main-content" className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         {children}
       </main>
+      <footer className="border-t-4 border-rose-100 bg-white/75">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 text-sm font-bold text-slate-600 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p>Pitch Patch is an open-source ear-training project.</p>
+          <nav aria-label="Footer navigation" className="flex flex-wrap gap-3">
+            <Link href="/" className="hover:text-rose-700">
+              Home
+            </Link>
+            <Link href="/sign-in" className="hover:text-rose-700">
+              Login
+            </Link>
+            <Link href="https://github.com/bradleystalcup-rgb/eguchi-pitch-training" className="inline-flex items-center gap-1 hover:text-rose-700">
+              <Code2 aria-hidden="true" className="size-4" />
+              GitHub
+            </Link>
+            <Link href="https://bradstalcup.com" className="hover:text-rose-700">
+              Brad Stalcup
+            </Link>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, Ear, Heart, Leaf, Palette, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, BarChart3, CheckCircle2, Ear, Heart, Leaf, Palette, ShieldCheck, Sparkles } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
@@ -23,6 +23,11 @@ export default function HomePage() {
       icon: Leaf,
     },
   ];
+  const heroNotes = [
+    "Playful ear training for young musicians",
+    "Short daily sessions that fit family routines",
+    "Parent-guided progress for each learner",
+  ];
 
   return (
     <AppShell>
@@ -31,9 +36,6 @@ export default function HomePage() {
           <div className="absolute inset-0 -z-10 bg-[linear-gradient(135deg,#fff1f2,#ffe4e6_52%,#fff7ed)]" />
           <div className="grid gap-7 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
             <div className="space-y-5">
-              <Badge tone="green" className="bg-white/85 text-emerald-900 ring-emerald-200">
-                Playful ear training for young musicians
-              </Badge>
               <div className="space-y-4">
                 <h1 className="max-w-3xl text-balance text-5xl font-black leading-none tracking-normal text-rose-950 sm:text-6xl lg:text-7xl">
                   Pitch Patch
@@ -72,21 +74,33 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="relative mx-auto flex aspect-square w-full max-w-[360px] items-center justify-center rounded-[2rem] bg-white/72 p-8 ring-4 ring-white/80 sm:max-w-[390px]">
-              <div className="absolute left-6 top-7 rounded-full bg-amber-100 px-3 py-1 text-sm font-black text-amber-900 ring-2 ring-amber-200">
-                5 min/day
+            <div className="relative rounded-[1.5rem] bg-white/76 p-5 shadow-[0_10px_30px_rgba(159,18,57,0.08)] ring-4 ring-white/80 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-normal text-rose-700">
+                    Built for practice
+                  </p>
+                  <h2 className="mt-2 max-w-xs text-2xl font-black leading-tight text-rose-950">
+                    Start with listening, then make progress visible.
+                  </h2>
+                </div>
+                <Image
+                  src="/brand/pitch-patch-logo-tight.png"
+                  alt="Pitch Patch strawberry music note logo"
+                  width={86}
+                  height={132}
+                  priority
+                  className="h-24 w-auto shrink-0 object-contain drop-shadow-[0_10px_16px_rgba(159,18,57,0.16)]"
+                />
               </div>
-              <div className="absolute bottom-7 right-7 rounded-full bg-emerald-100 px-3 py-1 text-sm font-black text-emerald-900 ring-2 ring-emerald-200">
-                Parent guided
-              </div>
-              <Image
-                src="/brand/pitch-patch-logo-v4.png"
-                alt="Pitch Patch strawberry music note logo"
-                width={360}
-                height={360}
-                priority
-                className="relative h-auto w-full max-w-[260px] object-contain drop-shadow-[0_18px_26px_rgba(159,18,57,0.20)]"
-              />
+              <ul className="mt-6 space-y-3">
+                {heroNotes.map((note) => (
+                  <li key={note} className="flex gap-3 rounded-2xl bg-rose-50/80 p-3 text-base font-bold leading-6 text-slate-700">
+                    <CheckCircle2 aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-emerald-600" />
+                    <span>{note}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </section>
